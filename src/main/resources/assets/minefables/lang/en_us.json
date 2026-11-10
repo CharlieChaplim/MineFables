@@ -1,0 +1,13 @@
+{
+  "itemGroup.minefables": "Example Mod Tab",
+  "block.minefables.example_block": "Example Block",
+  "item.minefables.example_item": "Example Item",
+
+  "minefables.configuration.title": "MineFables Configs",
+  "minefables.configuration.section.minefables.common.toml": "MineFables Configs",
+  "minefables.configuration.section.minefables.common.toml.title": "MineFables Configs",
+  "minefables.configuration.items": "Item List",
+  "minefables.configuration.logDirtBlock": "Log Dirt Block",
+  "minefables.configuration.magicNumberIntroduction": "Magic Number Text",
+  "minefables.configuration.magicNumber": "Magic Number"
+}
