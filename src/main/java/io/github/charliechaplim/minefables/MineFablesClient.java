@@ -1,4 +1,4 @@
-package com.example.examplemod;
+package io.github.charliechaplim.minefables;
 
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
