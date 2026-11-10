@@ -1,9 +1,11 @@
-package com.example.examplemod;
+package io.github.charliechaplim.minefables;
 
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 
+import io.github.charliechaplim.minefables.character.CharacterBootstrap;
+import io.github.charliechaplim.minefables.character.CharacterRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -86,6 +88,12 @@ public class MineFables {
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        CharacterBootstrap.registerAll();
+
+        LOGGER.info(
+                "Registered {} character definition(s).",
+                CharacterRegistry.getAll().size()
+        );
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

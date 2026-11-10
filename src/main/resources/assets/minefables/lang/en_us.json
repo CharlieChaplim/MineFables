@@ -9,5 +9,6 @@
   "minefables.configuration.items": "Item List",
   "minefables.configuration.logDirtBlock": "Log Dirt Block",
   "minefables.configuration.magicNumberIntroduction": "Magic Number Text",
-  "minefables.configuration.magicNumber": "Magic Number"
+  "minefables.configuration.magicNumber": "Magic Number",
+  "character.minefables.kimiramatsu": "Kimiramatsu"
 }
