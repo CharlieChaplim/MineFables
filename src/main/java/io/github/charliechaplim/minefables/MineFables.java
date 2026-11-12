@@ -1,4 +1,3 @@
-
 package io.github.charliechaplim.minefables;
 
 import com.mojang.logging.LogUtils;
@@ -18,19 +17,14 @@ public final class MineFables {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public MineFables(IEventBus modEventBus) {
-
-        // Registra os dados persistentes dos jogadores.
+        // Registro de dados persistentes do jogador no barramento de inicializacao.
         ModAttachments.register(modEventBus);
 
-        // Registra os comandos dos personagens.
+        // Os comandos sao registrados quando um servidor cria sua arvore de comandos.
         NeoForge.EVENT_BUS.addListener(CharacterCommands::register);
 
-        // Registra os personagens disponíveis no mod.
+        // Elenco do MineFables. O registro de personagens nao seleciona nenhum jogador.
         CharacterBootstrap.registerAll();
-
-        LOGGER.info(
-                "MineFables inicializado com {} personagem(ns) registrado(s).",
-                CharacterRegistry.getAll().size()
-        );
+        LOGGER.info("MineFables: {} personagens registrados.", CharacterRegistry.getAll().size());
     }
 }
