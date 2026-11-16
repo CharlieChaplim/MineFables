@@ -26,6 +26,7 @@ public final class CharacterCommands {
 
         event.getDispatcher().register(
                 Commands.literal("minefables")
+                        .then(ResourceCommands.build())
                         .then(Commands.literal("character")
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("id", StringArgumentType.word())

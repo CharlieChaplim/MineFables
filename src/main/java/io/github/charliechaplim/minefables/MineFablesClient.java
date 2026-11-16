@@ -1,31 +1,26 @@
 package io.github.charliechaplim.minefables;
 
-import net.minecraft.client.Minecraft;
+import io.github.charliechaplim.minefables.client.ResourceHud;
+import io.github.charliechaplim.minefables.client.ClientResourceState;
+import io.github.charliechaplim.minefables.client.ClientAbilitySelection;
+import io.github.charliechaplim.minefables.client.AbilityKeys;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
-import net.neoforged.neoforge.client.gui.ConfigurationScreen;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
-// This class will not load on dedicated servers. Accessing client side code from here is safe.
+/** Ponto de entrada exclusivo do cliente: nao carrega no servidor dedicado. */
 @Mod(value = MineFables.MODID, dist = Dist.CLIENT)
-// You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-@EventBusSubscriber(modid = MineFables.MODID, value = Dist.CLIENT)
-public class MineFablesClient {
-    public MineFablesClient(ModContainer container) {
-        // Allows NeoForge to create a config screen for this mod's configs.
-        // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
-        // Do not forget to add translations for your config options to the en_us.json file.
-        container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+public final class MineFablesClient {
+    public MineFablesClient(IEventBus modEventBus) {
+        modEventBus.addListener(ResourceHud::register);
+        modEventBus.addListener(AbilityKeys::register);
+        NeoForge.EVENT_BUS.addListener(AbilityKeys::onClientTick);
+        NeoForge.EVENT_BUS.addListener(this::onLogout);
     }
-
-    @SubscribeEvent
-    static void onClientSetup(FMLClientSetupEvent event) {
-        // Some client setup code
-        MineFables.LOGGER.info("HELLO FROM CLIENT SETUP");
-        MineFables.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+    private void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        ClientResourceState.clear();
+        ClientAbilitySelection.clear();
     }
 }
