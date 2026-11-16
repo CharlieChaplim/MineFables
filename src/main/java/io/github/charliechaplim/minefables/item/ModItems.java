@@ -18,6 +18,10 @@ public final class ModItems {
             ITEMS.registerItem("debugger_apple", DebuggerAppleItem::new,
                     new Item.Properties().stacksTo(1));
 
+    public static final Supplier<WilliamPageItem> WILLIAM_PAGE =
+            ITEMS.registerItem("william_page", WilliamPageItem::new,
+                    new Item.Properties().stacksTo(16));
+
     private ModItems() {}
 
     public static void register(IEventBus modEventBus) {
@@ -28,6 +32,7 @@ public final class ModItems {
     public static void addToCreativeTab(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(DEBUGGER_APPLE.get());
+            event.accept(WILLIAM_PAGE.get());
         }
     }
 }

@@ -1,6 +1,7 @@
 package io.github.charliechaplim.minefables.resource;
 
 import net.minecraft.server.level.ServerPlayer;
+import io.github.charliechaplim.minefables.william.WilliamKit;
 import net.minecraft.world.entity.Entity;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
@@ -77,7 +78,9 @@ public final class ResourceEvents {
 
         long now = player.serverLevel().getServer().overworld().getGameTime();
         if (now % 20 == 0) {
-            ResourceService.add(player, ResourceType.STAMINA, 10); // 10/s provisório
+            // William nao recupera Estamina enquanto mantem a Ressonancia.
+            if (!WilliamKit.isResonating(player))
+                ResourceService.add(player, ResourceType.STAMINA, 10); // 10/s provisorio
             ResourceService.add(player, ResourceType.MANA, 2);     // 2/s provisorio
             if (player.level().isDay()) ResourceService.add(player, ResourceType.FAITH, 2);
         }

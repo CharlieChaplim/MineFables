@@ -6,19 +6,17 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-/** Cliente informa somente o indice selecionado; servidor decide se pode usar. */
-public record UseAbilityPayload(int abilityIndex) implements CustomPacketPayload {
+/** Modo enviado exclusivamente como verificacao contra pacotes de um modo antigo. */
+public record UseAbilityPayload(int abilityIndex, boolean ultimateMode) implements CustomPacketPayload {
     public static final Type<UseAbilityPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(MineFables.MODID, "use_ability")
     );
-
     public static final StreamCodec<RegistryFriendlyByteBuf, UseAbilityPayload> STREAM_CODEC = StreamCodec.of(
-            (buffer, payload) -> buffer.writeVarInt(payload.abilityIndex()),
-            buffer -> new UseAbilityPayload(buffer.readVarInt())
+            (buffer, payload) -> {
+                buffer.writeVarInt(payload.abilityIndex());
+                buffer.writeBoolean(payload.ultimateMode());
+            },
+            buffer -> new UseAbilityPayload(buffer.readVarInt(), buffer.readBoolean())
     );
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
+    @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 }
