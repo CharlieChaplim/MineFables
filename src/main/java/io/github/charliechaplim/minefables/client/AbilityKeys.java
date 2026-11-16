@@ -46,7 +46,8 @@ public final class AbilityKeys {
         }
         while (USE.consumeClick()) {
             if (inGame && ClientAbilitySelection.count() > 0) {
-                PacketDistributor.sendToServer(new UseAbilityPayload(ClientAbilitySelection.selectedIndex()));
+                PacketDistributor.sendToServer(new UseAbilityPayload(
+                        ClientAbilitySelection.selectedIndex(), ClientAbilitySelection.ultimateMode()));
             }
         }
     }

@@ -22,5 +22,6 @@ public final class MineFablesClient {
     private void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientResourceState.clear();
         ClientAbilitySelection.clear();
+        io.github.charliechaplim.minefables.client.ClientWilliamState.clear();
     }
 }

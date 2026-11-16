@@ -1,6 +1,7 @@
 package io.github.charliechaplim.minefables.character;
 
 import io.github.charliechaplim.minefables.data.ModAttachments;
+import io.github.charliechaplim.minefables.william.WilliamKit;
 import io.github.charliechaplim.minefables.resource.ResourceService;
 import io.github.charliechaplim.minefables.resource.ResourceEvents;
 import io.github.charliechaplim.minefables.network.ResourceNetworking;
@@ -40,6 +41,7 @@ public final class PlayerCharacterService {
         player.setData(ModAttachments.SELECTED_CHARACTER, requestedId.toString());
         ResourceService.ensure(player);
         ResourceService.sync(player);
+        WilliamKit.sync(player);
         return SelectionResult.SELECTED;
     }
 
@@ -63,6 +65,7 @@ public final class PlayerCharacterService {
                 && !player.getData(ModAttachments.SELECTED_CHARACTER).isBlank();
         boolean hadResources = player.hasData(ModAttachments.RESOURCE_VALUES.get());
 
+        WilliamKit.reset(player);
         player.removeData(ModAttachments.SELECTED_CHARACTER.get());
         player.removeData(ModAttachments.RESOURCE_VALUES.get());
         ResourceEvents.clearCombatState(player);
@@ -70,6 +73,7 @@ public final class PlayerCharacterService {
         // ResourceService.sync() NAO envia pacotes quando nao ha personagem.
         // Enviamos um estado explicitamente vazio para limpar a HUD do cliente.
         ResourceNetworking.send(player, "", Map.of());
+        WilliamKit.sync(player);
         return hadCharacter || hadResources;
     }
 

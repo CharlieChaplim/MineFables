@@ -12,32 +12,14 @@ public final class CharacterResourceProfiles {
     private static final Map<String, Set<ResourceType>> PROFILES = new HashMap<>();
 
     static {
-        add(ResourceType.STAMINA,
-                "elias", "kuntiri", "draconir", "taty", "william", "lucas", "scintilla",
-                "sakuya", "melly", "shinichi", "shion", "nihil", "chain", "lass", "brak",
-                "ruth", "betty", "ibi", "marina", "dante");
-
-        add(ResourceType.MANA,
-                "roy", "mordekaiser", "lori", "unmei", "hayato", "kaito",
-                "luck", "pato", "kalista", "ainz", "rei_helstea", "teste");
-
-        add(ResourceType.FAITH,
-                "akayuki", "junin", "padre_joao", "padre_marcelo_rossi", "sumeragi",
-                "tamaiel", "ryuuko");
-
-        add(ResourceType.BLOOD,
-                "amnesia", "kimiramatsu", "unmei", "shinichi", "madara", "tatsu", "ashley");
-
-        // Roy: origem Jujutsu com Restricao Celestial, sem barra Amaldicoada.
-        add(ResourceType.CURSED, "kimiramatsu", "nalik", "asphodel", "outis");
-        add(ResourceType.ELECTRIC, "chuai_xeng", "arisu");
-        add(ResourceType.STACK, "wayne", "lastia");
-
-        // Realmente nao usam barra nem custo de recurso.
-        noEnergy("pwie", "bort", "tobi", "cross", "guinevere");
-
-        // Ainda sem classificacao confirmada: daniel, paracelcius, sophia, luke.
-        // Nao criar perfil vazio para eles: isso os classificaria incorretamente.
+        add(ResourceType.STAMINA, "william");
+        add(ResourceType.MANA, "kalista", "roy", "teste");
+        add(ResourceType.STACK, "lastia");
+        add(ResourceType.CURSED, "nalik", "asphodel", "pellokia", "kimiramatsu");
+        add(ResourceType.BLOOD, "kimiramatsu");
+        add(ResourceType.ELECTRIC, "kimiramatsu");
+        // Lass e explicitamente sem barra.
+        noEnergy("lass");
     }
 
     private CharacterResourceProfiles() {}
