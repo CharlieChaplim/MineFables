@@ -10,6 +10,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.DustParticleOptions;
+import org.joml.Vector3f;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
@@ -55,6 +57,8 @@ public final class WilliamKit {
     private static final long OVERDRIVE_CD = 40 * SECOND;
     private static final long DIVE_CD = 5 * SECOND;
     private static final long SLOTS_CD = 30 * SECOND;
+    private static final DustParticleOptions GOLD_SPARK = new DustParticleOptions(new Vector3f(1f, .69f, .09f), 1.45f);
+    private static final DustParticleOptions BRIGHT_SPARK = new DustParticleOptions(new Vector3f(1f, .93f, .36f), 1.0f);
 
     private WilliamKit() {}
 
@@ -100,6 +104,37 @@ public final class WilliamKit {
             level.sendParticles(particle, center.x + Math.cos(angle) * radius, center.y,
                     center.z + Math.sin(angle) * radius, 1, 0, 0, 0, 0);
         }
+    }
+
+    /** Dissolve o aro da mão e projeta estilhaços dourados no impacto. */
+    private static void impetuoBurst(ServerPlayer attacker, LivingEntity target) {
+        ServerLevel level = attacker.serverLevel();
+        // Posição aproximada do punho, compatível com destros e canhotos.
+        Vec3 forward = attacker.getLookAngle();
+        Vec3 right = new Vec3(-forward.z, 0, forward.x).normalize();
+        double side = attacker.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT ? 1 : -1;
+        Vec3 hand = attacker.position().add(0, attacker.getEyeHeight() * .68, 0)
+                .add(forward.scale(.42)).add(right.scale(.29 * side));
+        // O efeito parte da mão, não é um anel em volta do corpo.
+        for (int i = 0; i < 20; i++) {
+            double angle = 2.0 * Math.PI * i / 20;
+            double speed = .08 + .05 * ((i % 4) / 3.0);
+            level.sendParticles(i % 4 == 0 ? BRIGHT_SPARK : GOLD_SPARK,
+                    hand.x, hand.y, hand.z, 0,
+                    Math.cos(angle) * speed, .025 + (i % 3) * .025,
+                    Math.sin(angle) * speed, 1.0);
+        }
+        Vec3 hit = target.position().add(0, target.getBbHeight() * .55, 0);
+        for (int i = 0; i < 36; i++) {
+            double angle = 2.0 * Math.PI * i / 36;
+            double speed = .095 + (i % 5) * .011;
+            level.sendParticles(i % 5 == 0 ? BRIGHT_SPARK : GOLD_SPARK,
+                    hit.x, hit.y, hit.z, 0,
+                    Math.cos(angle) * speed, (i % 7 - 3) * .026,
+                    Math.sin(angle) * speed, 1.0);
+        }
+        level.sendParticles(BRIGHT_SPARK, hit.x, hit.y, hit.z, 12,
+                .16, .18, .16, .045);
     }
 
     private static void tierReached(ServerPlayer p, int tier) {
@@ -227,8 +262,8 @@ public final class WilliamKit {
         // A recarga inicia no IMPACTO, nao enquanto o golpe esta preparado.
         // Sem cronometro: persiste ate que um golpe valido cause dano.
         tag.putBoolean("impetuo_armed", true);
-        ring(p.serverLevel(), p.position().add(0, 1.1, 0), 1.1, 32, ParticleTypes.END_ROD);
-        ring(p.serverLevel(), p.position().add(0, 1.7, 0), .75, 24, ParticleTypes.ELECTRIC_SPARK);
+        // Aro 3D desenhado no cliente, preso ao punho: sem partículas espalhadas pelo corpo.
+        ResourceNetworking.sendImpetuo(p, true);
         p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                 SoundSource.PLAYERS, 1.0f, 1.5f);
         title(p, "IMPÉTUO PREPARADO", "O próximo golpe recebe um segundo dano", ChatFormatting.GOLD);
@@ -247,15 +282,12 @@ public final class WilliamKit {
         if (tag.getBoolean("impetuo_armed")) {
             tag.remove("impetuo_armed");
             tag.putLong("impetuo_ready", time(p) + IMPETUO_CD);
+            ResourceNetworking.sendImpetuo(p, false);
             // Simula o segundo dano efetivo depois das reducoes do primeiro.
             // Nao cria outro evento LivingDamageEvent, knockback ou status adicional.
             event.setNewDamage(event.getNewDamage() * 2f);
             if (event.getEntity().level() instanceof ServerLevel level) {
-                Vec3 center = event.getEntity().position().add(0, event.getEntity().getBbHeight() * .55, 0);
-                ring(level, center, 1.2, 40, ParticleTypes.END_ROD);
-                ring(level, center.add(0, .3, 0), .8, 28, ParticleTypes.ELECTRIC_SPARK);
-                level.sendParticles(ParticleTypes.CRIT, center.x, center.y, center.z,
-                        40, .5, .6, .5, .24);
+                impetuoBurst(p, event.getEntity());
                 level.playSound(null, event.getEntity().blockPosition(), SoundEvents.PLAYER_ATTACK_CRIT,
                         SoundSource.PLAYERS, 1.5f, .7f);
             }
@@ -379,6 +411,7 @@ public final class WilliamKit {
                 p.getZ(), 120, 1.3, 1.1, 1.3, .08);
         title(p, "DRAGON OVERRIDE", "Ultimate ativada — 60 segundos", ChatFormatting.GOLD);
         say(p, "DRAGON OVERRIDE: 60 segundos!");
+        ResourceNetworking.sendDragon(p, true);
         sync(p);
         return true;
     }
@@ -477,6 +510,7 @@ public final class WilliamKit {
         if (armor != null) armor.removeModifier(ARMOR_ID);
         WilliamCrazySlots.restore(p);
         say(p, "Dragon Override encerrado.");
+        ResourceNetworking.sendDragon(p, false);
         p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_DEACTIVATE,
                 SoundSource.PLAYERS, .75f, .8f);
         sync(p);
@@ -505,19 +539,31 @@ public final class WilliamKit {
                 } else applyResonance(p);
             }
         }
-        if (tag.getBoolean("impetuo_armed") && now % 10 == 0) {
-            // Um aro discreto acompanha William ate atingir o proximo golpe.
-            ring(p.serverLevel(), p.position().add(0, 1.05, 0), 1.0,
-                    8, ParticleTypes.END_ROD);
-        }
         if (isUltimateActive(p) && now % 10 == 0) {
             p.serverLevel().sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + 1,
                     p.getZ(), 8, .35, .65, .35, .01);
             p.serverLevel().sendParticles(ParticleTypes.SOUL_FIRE_FLAME, p.getX(),
                     p.getY() + .35, p.getZ(), 4, .3, .2, .3, .005);
         }
-        // Reenvio leve para contagem regressiva e recuperacao de pacotes atrasados.
-        if (now % 10 == 0) sync(p);
+        // Contagem da HUD para o proprio jogador; heartbeat visual para observadores.
+        if (now % 10 == 0) {
+            sync(p);
+            if (isUltimateActive(p)) ResourceNetworking.sendDragon(p, true);
+            if (tag.getBoolean("impetuo_armed") && now % 20 == 0) {
+                ResourceNetworking.sendImpetuo(p, true);
+            }
+        }
+    }
+
+    /** Novos observadores recebem a transformacao sem esperar o heartbeat. */
+    public static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (event.getEntity() instanceof ServerPlayer watcher
+                && event.getTarget() instanceof ServerPlayer target) {
+            if (isUltimateActive(target)) ResourceNetworking.sendDragonTo(watcher, target);
+            if (isWilliam(target) && data(target).getBoolean("impetuo_armed")) {
+                ResourceNetworking.sendImpetuoTo(watcher, target);
+            }
+        }
     }
 
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
@@ -527,6 +573,7 @@ public final class WilliamKit {
             if (tag.getBoolean("ultimate")) endUltimate(p);
             if (tag.getBoolean("resonance")) stopResonance(p);
             WilliamCrazySlots.restore(p);
+            if (isWilliam(p) && tag.getBoolean("impetuo_armed")) ResourceNetworking.sendImpetuo(p, true);
             sync(p);
         }
     }
@@ -535,6 +582,7 @@ public final class WilliamKit {
         if (event.getEntity() instanceof ServerPlayer p) {
             endUltimate(p);
             stopResonance(p);
+            ResourceNetworking.sendImpetuo(p, false);
         }
     }
 
@@ -550,11 +598,19 @@ public final class WilliamKit {
         next.getPersistentData().put(ROOT, copied);
     }
 
+    public static void onRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer p) {
+            ResourceNetworking.sendImpetuo(p, false);
+            sync(p);
+        }
+    }
+
     public static void reset(ServerPlayer p) {
         endUltimate(p);
         stopResonance(p);
         WilliamCrazySlots.restore(p);
         p.getPersistentData().remove(ROOT);
+        ResourceNetworking.sendImpetuo(p, false);
         sync(p);
     }
 
