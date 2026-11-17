@@ -41,7 +41,9 @@ public final class MineFables {
         NeoForge.EVENT_BUS.addListener(MineFables::discardTemporaryDrops);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogin);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogout);
+        NeoForge.EVENT_BUS.addListener(WilliamKit::onStartTracking);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onClone);
+        NeoForge.EVENT_BUS.addListener(WilliamKit::onRespawn);
         NeoForge.EVENT_BUS.addListener(ResourceEvents::onPlayerTick);
         NeoForge.EVENT_BUS.addListener(ResourceEvents::onLogin);
         NeoForge.EVENT_BUS.addListener(ResourceEvents::onLogout);
