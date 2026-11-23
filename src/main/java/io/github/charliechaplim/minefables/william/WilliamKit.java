@@ -8,20 +8,18 @@ import io.github.charliechaplim.minefables.network.ResourceNetworking;
 import io.github.charliechaplim.minefables.network.WilliamStatusPayload;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.particles.DustParticleOptions;
 import org.joml.Vector3f;
-import net.minecraft.core.particles.ParticleOptions;
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -39,10 +37,29 @@ import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.UUID;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.level.block.Blocks;
+import io.github.charliechaplim.minefables.item.ModItems;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.entity.projectile.SmallFireball;
+import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
+
 import java.util.Locale;
 
 /** Sistema de William: somente servidor. O estado e os cooldowns usam NBT persistente. */
@@ -52,11 +69,20 @@ public final class WilliamKit {
     private static final ResourceLocation ARMOR_ID = ResourceLocation.fromNamespaceAndPath("minefables", "dragon_override_armor");
     private static final String TEAM = "mf_william_red";
     private static final long SECOND = 20L;
-    private static final long IMPETUO_CD = 10 * SECOND;
+    private static final long IMPETUO_CD = 5 * SECOND;
     private static final long WALKER_CD = 30 * SECOND;
-    private static final long OVERDRIVE_CD = 40 * SECOND;
+    private static final long OVERDRIVE_CD = 20 * SECOND;
     private static final long DIVE_CD = 5 * SECOND;
-    private static final long SLOTS_CD = 30 * SECOND;
+    private static final long DIVE_MARKED_CD = 90 * SECOND;
+    private static final long DRAGON_CD = 250 * SECOND;
+    private static final long FIREBALL_CD = 10L; // 0.5 segundo
+    private static final long STEAM_CD = 40L;
+    private static final long ZONE_CD = 500 * SECOND;
+    private static final ThreadLocal<Boolean> REPEATING = ThreadLocal.withInitial(() -> false);
+    private static final Map<UUID, List<DelayedHit>> PENDING_HITS = new HashMap<>();
+    private record DelayedHit(UUID targetId, ResourceKey<Level> dimension, float damage, long triggerTick, boolean sparks) {}
+    public static boolean isRepeatDamage() { return REPEATING.get(); }
+    private static final long SLOTS_CD = 15 * SECOND;
     private static final DustParticleOptions GOLD_SPARK = new DustParticleOptions(new Vector3f(1f, .69f, .09f), 1.45f);
     private static final DustParticleOptions BRIGHT_SPARK = new DustParticleOptions(new Vector3f(1f, .93f, .36f), 1.0f);
 
@@ -68,8 +94,8 @@ public final class WilliamKit {
         return root.getCompound(ROOT);
     }
 
-    public static int level(ServerPlayer p) { return Math.max(1, Math.min(5, data(p).getInt("level"))); }
-    public static boolean hasArsenal(ServerPlayer p) { return isWilliam(p) && level(p) >= 3; }
+    public static int level(ServerPlayer p) { return Math.max(1, Math.min(6, data(p).getInt("level"))); }
+    public static boolean hasArsenal(ServerPlayer p) { return false; } // Arsenal nao integra este rework
     public static boolean isWilliam(ServerPlayer p) { return PlayerCharacterService.isUsing(p, ID); }
     public static boolean isResonating(ServerPlayer p) { return isWilliam(p) && data(p).getBoolean("resonance"); }
     public static boolean isUltimateActive(ServerPlayer p) {
@@ -79,31 +105,22 @@ public final class WilliamKit {
     /** Estado visual enviado pelo servidor: nivel, modo e tempo restantes. */
     public static void sync(ServerPlayer p) {
         if (!isWilliam(p)) {
-            ResourceNetworking.sendWilliam(p, new WilliamStatusPayload(1, false, 0, false, 0));
+            ResourceNetworking.sendWilliam(p, new WilliamStatusPayload(1, false, 0, false, 0, 0, new int[6], new int[4]));
             return;
         }
         CompoundTag tag = data(p);
         boolean isUltimate = isUltimateActive(p);
         int remaining = isUltimate ? (int) Math.min(3600L, Math.max(0L,
                 (tag.getLong("ultimate_until") - time(p) + 19L) / 20L)) : 0;
+        String[] normals = {"resonance_ready","impetuo_ready","walker_ready","slots_ready","dive_ready","dragon_ready"};
+        String[] ultimates = {"fireball_ready","steam_ready","overdrive_ready","zone_ready"};
+        int[] a = new int[normals.length], b = new int[ultimates.length];
+        long now = time(p);
+        for (int i = 0; i < a.length; i++) a[i] = (int) Math.max(0, Math.min(20000, tag.getLong(normals[i]) - now));
+        for (int i = 0; i < b.length; i++) b[i] = (int) Math.max(0, Math.min(20000, tag.getLong(ultimates[i]) - now));
         ResourceNetworking.sendWilliam(p, new WilliamStatusPayload(level(p), isUltimate,
-                tag.getBoolean("resonance") ? tier(p) : 0,
-                tag.getBoolean("impetuo_armed"), remaining));
-    }
-
-    private static void title(ServerPlayer p, String header, String sub, ChatFormatting color) {
-        p.connection.send(new ClientboundSetTitlesAnimationPacket(4, 34, 8));
-        p.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(sub).withStyle(ChatFormatting.WHITE)));
-        p.connection.send(new ClientboundSetTitleTextPacket(Component.literal(header).withStyle(color)));
-    }
-
-    /** Aneis luminosos de particulas, renderizados para todos os jogadores proximos. */
-    private static void ring(ServerLevel level, Vec3 center, double radius, int amount, ParticleOptions particle) {
-        for (int i = 0; i < amount; i++) {
-            double angle = i * Math.PI * 2.0 / amount;
-            level.sendParticles(particle, center.x + Math.cos(angle) * radius, center.y,
-                    center.z + Math.sin(angle) * radius, 1, 0, 0, 0, 0);
-        }
+                tag.getBoolean("resonance") ? tier(p) : 0, tag.getBoolean("impetuo_armed"),
+                remaining, tag.getInt("temperature"), a, b));
     }
 
     /** Dissolve o aro da mão e projeta estilhaços dourados no impacto. */
@@ -138,72 +155,66 @@ public final class WilliamKit {
     }
 
     private static void tierReached(ServerPlayer p, int tier) {
-        String roman = tier == 3 ? "III" : tier == 2 ? "II" : "I";
-        title(p, "RESSONÂNCIA " + roman,
-                tier == 3 ? "Potência máxima — Impétuo disponível" :
-                        tier == 2 ? "Velocidade I desbloqueada" : "Resistência I ativada",
-                ChatFormatting.RED);
-        ring(p.serverLevel(), p.position().add(0, 1.0, 0), 1.2, 28, ParticleTypes.END_ROD);
-        p.serverLevel().sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + 1,
-                p.getZ(), 25, .6, .6, .6, .03);
-        p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_POWER_SELECT,
-                SoundSource.PLAYERS, 1f, .8f + tier * .15f);
+        WilliamVfx.resonance(p, tier);
     }
+
     private static long time(ServerPlayer p) { return p.getServer().overworld().getGameTime(); }
 
     public static boolean readPage(ServerPlayer p) {
-        if (!isWilliam(p)) { say(p, "Somente William pode ler estas paginas."); return false; }
+        if (!isWilliam(p)) {  return false; }
         int lvl = level(p);
-        if (lvl >= 5) { say(p, "Todas as paginas de William ja foram recuperadas."); return false; }
+        if (lvl >= 6) {  return false; }
         data(p).putInt("level", lvl + 1);
-        say(p, "Pagina recuperada! William: nivel " + (lvl + 1) + "/5.");
+        
         sync(p);
         return true;
     }
 
     private static boolean require(ServerPlayer p, int lvl) {
         if (!isWilliam(p)) return false;
-        if (level(p) < lvl) { say(p, "Requer pagina de William: nivel " + lvl + "."); return false; }
+        if (level(p) < lvl) {  return false; }
         return true;
     }
 
     private static boolean available(CompoundTag tag, String name, long now, long cd, ServerPlayer p) {
         long left = tag.getLong(name) - now;
-        if (left > 0) { say(p, "Recarga: " + ((left + 19) / 20) + "s."); return false; }
+        if (left > 0) {  return false; }
         return true;
     }
 
-    private static void say(ServerPlayer p, String message) { p.displayClientMessage(Component.literal(message), true); }
 
     public static boolean resonance(ServerPlayer p) {
         if (!require(p, 1)) return false;
         CompoundTag tag = data(p);
         if (tag.getBoolean("resonance")) {
             stopResonance(p);
-            say(p, "Ressoar [Eficiência] desativado.");
+            
             return true;
         }
-        if (ResourceService.get(p, ResourceType.STAMINA) <= 0) { say(p, "Estamina insuficiente."); return false; }
+        if (!available(tag, "resonance_ready", time(p), 0, p)) return false;
+        if (!isUltimateActive(p) && ResourceService.get(p, ResourceType.STAMINA) <= 0) {
+             return false;
+        }
         tag.putBoolean("resonance", true);
         tag.putLong("resonance_start", time(p));
         tag.putInt("resonance_tier", 1);
         setRedTeam(p, true);
         applyResonance(p);
         tierReached(p, 1);
-        say(p, "Ressoar [Eficiência] — potência I.");
+        
         sync(p);
         return true;
     }
 
     private static int tier(ServerPlayer p) {
         long ticks = Math.max(0, time(p) - data(p).getLong("resonance_start"));
-        return ticks >= 800 ? 3 : ticks >= 400 ? 2 : 1;
+        return ticks >= 400 ? 3 : ticks >= 200 ? 2 : 1;
     }
 
     private static void applyResonance(ServerPlayer p) {
         int tier = tier(p);
         p.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 45, tier == 3 ? 1 : 0, false, false));
-        if (tier >= 2) p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 45, 0, false, false));
+        if (tier >= 2) p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 45, tier == 3 ? 1 : 0, false, false));
         p.addEffect(new MobEffectInstance(MobEffects.GLOWING, 45, 0, false, false));
     }
 
@@ -235,12 +246,14 @@ public final class WilliamKit {
         CompoundTag tag = data(p);
         if (!tag.getBoolean("resonance")) return;
         tag.putBoolean("resonance", false);
+        tag.putLong("resonance_ready", time(p) + 10 * SECOND);
         tag.remove("resonance_start");
         tag.remove("resonance_tier");
         p.removeEffect(MobEffects.DAMAGE_RESISTANCE);
         p.removeEffect(MobEffects.MOVEMENT_SPEED);
         p.removeEffect(MobEffects.GLOWING);
         setRedTeam(p, false);
+        WilliamVfx.resonanceOff(p);
         sync(p);
     }
 
@@ -248,16 +261,13 @@ public final class WilliamKit {
         if (!require(p, 2)) return false;
         CompoundTag tag = data(p);
         if (tag.getBoolean("impetuo_armed")) {
-            say(p, "Impétuo já preparado. Acerte um golpe para consumi-lo.");
+            
             return false;
-        }
-        if (!isResonating(p) || tier(p) != 3) {
-            say(p, "Impétuo requer Ressonância na potência máxima (40s)."); return false;
         }
         long now = time(p);
         if (!available(tag, "impetuo_ready", now, IMPETUO_CD, p)) return false;
-        if (!ResourceService.trySpend(p, ResourceType.STAMINA, 10)) {
-            say(p, "Estamina insuficiente (10)."); return false;
+        if (!ResourceService.trySpend(p, ResourceType.STAMINA, 15)) {
+             return false;
         }
         // A recarga inicia no IMPACTO, nao enquanto o golpe esta preparado.
         // Sem cronometro: persiste ate que um golpe valido cause dano.
@@ -266,96 +276,158 @@ public final class WilliamKit {
         ResourceNetworking.sendImpetuo(p, true);
         p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                 SoundSource.PLAYERS, 1.0f, 1.5f);
-        title(p, "IMPÉTUO PREPARADO", "O próximo golpe recebe um segundo dano", ChatFormatting.GOLD);
         sync(p);
         return true;
     }
 
     public static void onDamage(LivingDamageEvent.Pre event) {
-        Entity entity = event.getSource().getEntity();
-        if (!(entity instanceof ServerPlayer p) || !isWilliam(p) || event.getNewDamage() <= 0
-                || event.getEntity() == p) return;
-        CompoundTag tag = data(p);
-        if (isUltimateActive(p))
-            event.getEntity().setRemainingFireTicks(Math.max(event.getEntity().getRemainingFireTicks(), 100));
-
-        if (tag.getBoolean("impetuo_armed")) {
-            tag.remove("impetuo_armed");
-            tag.putLong("impetuo_ready", time(p) + IMPETUO_CD);
-            ResourceNetworking.sendImpetuo(p, false);
-            // Simula o segundo dano efetivo depois das reducoes do primeiro.
-            // Nao cria outro evento LivingDamageEvent, knockback ou status adicional.
-            event.setNewDamage(event.getNewDamage() * 2f);
-            if (event.getEntity().level() instanceof ServerLevel level) {
-                impetuoBurst(p, event.getEntity());
-                level.playSound(null, event.getEntity().blockPosition(), SoundEvents.PLAYER_ATTACK_CRIT,
-                        SoundSource.PLAYERS, 1.5f, .7f);
-            }
-            say(p, "IMPÉTUO! Golpe executado.");
-            sync(p);
+        // Dano sofrido durante a canalizacao cancela o teleporte, antes do impacto.
+        if (event.getEntity() instanceof ServerPlayer victim
+                && event.getSource().is(net.minecraft.world.damagesource.DamageTypes.FELL_OUT_OF_WORLD)
+                && WilliamZone.cancelVoidDamage(victim)) {
+            event.setNewDamage(0);return;
         }
+        // O conjurador nao recebe dano de queda dentro do Vertice Vazio.
+        if (event.getEntity() instanceof ServerPlayer victim
+                && event.getSource().is(net.minecraft.world.damagesource.DamageTypes.FALL)
+                && WilliamZone.cancelFallDamage(victim)) {
+            victim.resetFallDistance();
+            event.setNewDamage(0);
+            return;
+        }
+        if (event.getEntity() instanceof ServerPlayer victim && data(victim).getLong("dive_channel_until") > 0) {
+            data(victim).remove("dive_channel_until");
+            
+            sync(victim);
+        }
+        Entity direct = event.getSource().getDirectEntity();
+        Entity attacker = event.getSource().getEntity();
+        if (!(attacker instanceof ServerPlayer p) || !isWilliam(p) || event.getNewDamage() <= 0
+                || event.getEntity() == p || REPEATING.get()) return;
+        if (isUltimateActive(p)) event.getEntity().setRemainingFireTicks(Math.max(100,
+                event.getEntity().getRemainingFireTicks()));
+        // So um golpe fisico basico consome o Impetuo. Projeteis, magia e dano indireto nao.
+        if (direct != p || !data(p).getBoolean("impetuo_armed")) return;
+        CompoundTag tag = data(p);
+        tag.remove("impetuo_armed");
+        tag.putLong("impetuo_ready", time(p) + IMPETUO_CD);
+        ResourceNetworking.sendImpetuo(p, false);
+        float damage = event.getNewDamage();
+        WilliamVfx.impetuoImpact(p.serverLevel(), event.getEntity().position()
+                .add(0, event.getEntity().getBbHeight() * .55, 0), false);
+        List<DelayedHit> queue = PENDING_HITS.computeIfAbsent(p.getUUID(), k -> new ArrayList<>());
+        queue.add(new DelayedHit(event.getEntity().getUUID(), p.serverLevel().dimension(), damage, time(p) + 20, false));
+        if (p.getMainHandItem().is(ModItems.FULGOR.get()))
+            queue.add(new DelayedHit(event.getEntity().getUUID(), p.serverLevel().dimension(), damage * 1.3f, time(p) + 30, true));
+        
+        sync(p);
+    }
+
+    private static void executeDelayedHits(ServerPlayer p, long now) {
+        List<DelayedHit> pending = PENDING_HITS.get(p.getUUID());
+        if (pending == null) return;
+        var iterator = pending.iterator();
+        while (iterator.hasNext()) {
+            DelayedHit hit = iterator.next();
+            if (hit.triggerTick > now) continue;
+            iterator.remove();
+            ServerLevel level = p.getServer().getLevel(hit.dimension);
+            if (level == null || !(level.getEntity(hit.targetId) instanceof LivingEntity target) || !target.isAlive()) continue;
+            REPEATING.set(true);
+            try {
+                // Novo hit real: permite resistencias/protecao normalmente; nao ativa novos procs.
+                target.hurt(p.damageSources().playerAttack(p), hit.damage);
+                if (hit.sparks) {
+                    level.sendParticles(ParticleTypes.ELECTRIC_SPARK, target.getX(), target.getY() + .8,
+                            target.getZ(), 40, .5, .5, .5, .12);
+                }
+                impetuoBurst(p, target);
+                WilliamVfx.impetuoImpact(level, target.position()
+                        .add(0, target.getBbHeight() * .55, 0), hit.sparks);
+            } finally { REPEATING.set(false); }
+        }
+        if (pending.isEmpty()) PENDING_HITS.remove(p.getUUID());
     }
 
     public static boolean walker(ServerPlayer p) {
-        if (!require(p, 4)) return false;
+        if (!require(p, 3)) return false;
         CompoundTag tag = data(p);
-        long now = time(p);
-        if (!available(tag, "walker_ready", now, WALKER_CD, p)) return false;
-        // Primeiro prioriza o bau alvejado com a mira. Caso contrario, envia o item da mao.
         Vec3 eye = p.getEyePosition();
-        Vec3 end = eye.add(p.getLookAngle().scale(5));
-        BlockHitResult hit = p.serverLevel().clip(new ClipContext(eye, end,
+        BlockHitResult hit = p.serverLevel().clip(new ClipContext(eye, eye.add(p.getLookAngle().scale(5)),
                 ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, p));
         BlockPos pos = hit.getBlockPos();
-        ChestBlockEntity lookedChest = p.serverLevel().getBlockEntity(pos) instanceof ChestBlockEntity chest ? chest : null;
-        if (lookedChest != null) {
-            if (!ResourceService.trySpend(p, ResourceType.STAMINA, 40)) { say(p, "Estamina insuficiente (40)."); return false; }
+        Container aimed = getStorage(p.serverLevel(), pos);
+        // Apontar para um armazenamento altera o vinculo de graca, sem gastar recarga.
+        if (aimed != null && !p.isShiftKeyDown()) {
             tag.putString("chest_dimension", p.serverLevel().dimension().location().toString());
             tag.putLong("chest_pos", pos.asLong());
             tag.putBoolean("chest_linked", true);
-            tag.putLong("walker_ready", now + WALKER_CD);
-            ring(p.serverLevel(), Vec3.atCenterOf(pos).add(0, .5, 0), 1.2, 30, ParticleTypes.END_ROD);
-            p.serverLevel().sendParticles(ParticleTypes.ENCHANT, pos.getX() + .5,
-                    pos.getY() + 1.0, pos.getZ() + .5, 45, .5, .5, .5, .3);
-            p.serverLevel().playSound(null, pos, SoundEvents.END_PORTAL_FRAME_FILL,
-                    SoundSource.PLAYERS, .9f, 1.35f);
-            say(p, "Andarilho da Luz: baú vinculado.");
+            WilliamVfx.link(p.serverLevel(), Vec3.atCenterOf(pos));
+            
             return true;
         }
-        if (!tag.getBoolean("chest_linked")) { say(p, "Olhe para um bau a ate 5 blocos primeiro."); return false; }
-        ItemStack carried = p.getMainHandItem();
-        if (carried.isEmpty() || WilliamCrazySlots.isTemporary(carried)) { say(p, "Segure um item permanente na mao principal."); return false; }
-        ResourceLocation dim = ResourceLocation.tryParse(tag.getString("chest_dimension"));
-        if (dim == null) return false;
-        ServerLevel remote = p.getServer().getLevel(net.minecraft.resources.ResourceKey.create(
-                net.minecraft.core.registries.Registries.DIMENSION, dim));
-        if (remote == null) { say(p, "A dimensao do bau nao existe mais."); return false; }
-        BlockPos remotePos = BlockPos.of(tag.getLong("chest_pos"));
-        // Forca o carregamento do chunk: funciona mesmo a longas distancias.
-        remote.getChunk(remotePos.getX() >> 4, remotePos.getZ() >> 4);
-        if (!(remote.getBlockEntity(remotePos) instanceof ChestBlockEntity chest)) {
-            tag.putBoolean("chest_linked", false);
-            say(p, "Bau removido: vinculo desfeito.");
+        if (!tag.getBoolean("chest_linked")) {  return false; }
+        ResourceLocation id = ResourceLocation.tryParse(tag.getString("chest_dimension"));
+        if (id == null) return false;
+        ServerLevel remote = p.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, id));
+        if (remote == null) return false;
+        BlockPos linked = BlockPos.of(tag.getLong("chest_pos"));
+        remote.getChunk(linked.getX() >> 4, linked.getZ() >> 4);
+        Container storage = getStorage(remote, linked);
+        if (storage == null) { tag.putBoolean("chest_linked", false);  return false; }
+        if (p.isShiftKeyDown()) {
+            // Interface de baus vanilla 27/54 slots a distancia; outros tamanhos exigem menu proprio.
+            if (storage.getContainerSize() == 27 || storage.getContainerSize() == 54) {
+                WilliamVfx.link(p.serverLevel(), p.position());
+                // ChestMenu testa a distância de stillValid a cada tick: usa uma janela remota
+                // delegando todos os itens ao inventário verdadeiro, mas sem limite de distância.
+                Container remoteView = new RemoteContainer(storage);
+                p.openMenu(new SimpleMenuProvider((idMenu, inv, player) -> remoteView.getContainerSize() == 54
+                        ? ChestMenu.sixRows(idMenu, inv, remoteView)
+                        : ChestMenu.threeRows(idMenu, inv, remoteView), Component.literal("Caminhante da Luz")));
+                return true;
+            }
+            
             return false;
         }
-        if (!canFit(chest, carried)) { say(p, "Bau cheio: transferencia cancelada sem cobrar Estamina."); return false; }
-        if (!ResourceService.trySpend(p, ResourceType.STAMINA, 40)) { say(p, "Estamina insuficiente (40)."); return false; }
-        Vec3 castPosition = p.position().add(0, 1.1, 0);
-        insert(chest, carried);
+        long now = time(p);
+        if (!available(tag, "walker_ready", now, WALKER_CD, p)) return false;
+        ItemStack carried = p.getMainHandItem();
+        if (carried.isEmpty() || WilliamCrazySlots.isTemporary(carried)) return false;
+        if (!canFit(storage, carried)) {  return false; }
+        if (!ResourceService.trySpend(p, ResourceType.STAMINA, 40)) return false;
+        insert(storage, carried);
         p.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-        chest.setChanged();
+        storage.setChanged();
         tag.putLong("walker_ready", now + WALKER_CD);
-        ring(p.serverLevel(), castPosition, .9, 28, ParticleTypes.END_ROD);
-        p.serverLevel().sendParticles(ParticleTypes.PORTAL, castPosition.x,
-                castPosition.y, castPosition.z, 60, .3, .4, .3, .25);
-        Vec3 destinationEffect = Vec3.atCenterOf(remotePos).add(0, .6, 0);
-        ring(remote, destinationEffect, 1.0, 28, ParticleTypes.END_ROD);
-        remote.sendParticles(ParticleTypes.ENCHANT, destinationEffect.x,
-                destinationEffect.y, destinationEffect.z, 45, .4, .4, .4, .3);
-        p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.ENDERMAN_TELEPORT,
-                SoundSource.PLAYERS, .8f, 1.65f);
-        say(p, "Andarilho da Luz: itens enviados ao baú vinculado.");
+        WilliamVfx.walkerTravel(p.serverLevel(), p.position(), remote, Vec3.atCenterOf(linked));
+        
+        sync(p);
         return true;
+    }
+
+    /** Janela remota. Não duplica os itens do inventário original. */
+    private static final class RemoteContainer implements Container {
+        private final Container delegate;
+        private RemoteContainer(Container delegate) { this.delegate = delegate; }
+        @Override public int getContainerSize() { return delegate.getContainerSize(); }
+        @Override public boolean isEmpty() { return delegate.isEmpty(); }
+        @Override public ItemStack getItem(int slot) { return delegate.getItem(slot); }
+        @Override public ItemStack removeItem(int slot, int amount) { return delegate.removeItem(slot, amount); }
+        @Override public ItemStack removeItemNoUpdate(int slot) { return delegate.removeItemNoUpdate(slot); }
+        @Override public void setItem(int slot, ItemStack stack) { delegate.setItem(slot, stack); }
+        @Override public void setChanged() { delegate.setChanged(); }
+        @Override public boolean stillValid(Player player) { return true; }
+        @Override public void clearContent() { delegate.clearContent(); }
+        @Override public int getMaxStackSize() { return delegate.getMaxStackSize(); }
+        @Override public boolean canPlaceItem(int slot, ItemStack stack) { return delegate.canPlaceItem(slot, stack); }
+    }
+
+    private static Container getStorage(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.getBlock() instanceof ChestBlock chest) return ChestBlock.getContainer(chest, state, level, pos, true);
+        if (level.getBlockEntity(pos) instanceof Container container) return container;
+        return null;
     }
 
     private static boolean canFit(Container chest, ItemStack stack) {
@@ -388,128 +460,285 @@ public final class WilliamKit {
         }
     }
 
-    public static boolean dragon(ServerPlayer p) {
-        if (!require(p, 5)) return false;
-        CompoundTag tag = data(p);
-        if (tag.getBoolean("ultimate")) { say(p, "Dragon Override ja esta ativo."); return false; }
-        tag.putBoolean("ultimate", true);
-        tag.putLong("ultimate_until", time(p) + 60 * SECOND);
-        tag.putInt("dive_step", 0);
-        tag.putBoolean("had_flight", p.getAbilities().mayfly);
-        p.getAbilities().mayfly = true;
-        p.onUpdateAbilities();
-        var armor = p.getAttribute(Attributes.ARMOR);
-        if (armor != null) {
-            armor.removeModifier(ARMOR_ID);
-            armor.addTransientModifier(new AttributeModifier(ARMOR_ID, 10.0, AttributeModifier.Operation.ADD_VALUE));
-        }
-        p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.ENDER_DRAGON_GROWL,
-                SoundSource.PLAYERS, 1.8f, .85f);
-        ring(p.serverLevel(), p.position().add(0, .25, 0), 2.6, 60, ParticleTypes.FLAME);
-        ring(p.serverLevel(), p.position().add(0, 1.4, 0), 1.5, 48, ParticleTypes.END_ROD);
-        p.serverLevel().sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + 1,
-                p.getZ(), 120, 1.3, 1.1, 1.3, .08);
-        title(p, "DRAGON OVERRIDE", "Ultimate ativada — 60 segundos", ChatFormatting.GOLD);
-        say(p, "DRAGON OVERRIDE: 60 segundos!");
-        ResourceNetworking.sendDragon(p, true);
-        sync(p);
-        return true;
-    }
-
-    private static boolean active(ServerPlayer p) {
-        if (!require(p, 5)) return false;
-        CompoundTag t = data(p);
-        if (!t.getBoolean("ultimate") || time(p) >= t.getLong("ultimate_until")) {
-            say(p, "Ative Dragon Override primeiro."); return false;
-        }
-        return true;
-    }
-
-    public static boolean overdrive(ServerPlayer p) {
-        if (!active(p)) return false;
+    public static boolean slots(ServerPlayer p) {
+        if (!require(p, 4)) return false;
         CompoundTag tag = data(p);
         long now = time(p);
-        if (!available(tag, "overdrive_ready", now, OVERDRIVE_CD, p)) return false;
-        tag.putLong("overdrive_ready", now + OVERDRIVE_CD);
-        tag.putLong("ultimate_until", tag.getLong("ultimate_until") + 30 * SECOND);
-        ResourceService.set(p, ResourceType.STAMINA, 0);
-        List<LivingEntity> targets = p.serverLevel().getEntitiesOfClass(LivingEntity.class,
-                p.getBoundingBox().inflate(10), living -> living != p);
-        for (LivingEntity target : targets) target.setRemainingFireTicks(Math.max(100, target.getRemainingFireTicks()));
-        p.serverLevel().sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + 1, p.getZ(), 250, 9, 2, 9, .09);
-        p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 2f, .7f);
-        title(p, "OVERDRIVE", "+30 segundos — Estamina zerada", ChatFormatting.RED);
-        say(p, "OVERDRIVE: +30s, Estamina zerada; chamas em raio de 10 blocos.");
+        if (!available(tag, "slots_ready", now, SLOTS_CD, p)) return false;
+        if (ResourceService.get(p, ResourceType.STAMINA) < 30) return false;
+        if (!WilliamCrazySlots.summon(p, now)) return false;
+        ResourceService.trySpend(p, ResourceType.STAMINA, 30);
+        // O cooldown da Citacao inicia em WilliamCrazySlots.restore(),
+        // quando a arma temporaria desaparece (inclusive termino antecipado).
         sync(p);
         return true;
     }
 
     public static boolean dive(ServerPlayer p) {
-        if (!active(p)) return false;
+        if (!require(p, 5)) return false;
         CompoundTag tag = data(p);
         long now = time(p);
-        if (!available(tag, "dive_ready", now, DIVE_CD, p)) return false;
-        int step = tag.getInt("dive_step");
-        if (step > 3) { say(p, "Mergulhar atingiu o limite de Estamina desta ultimate."); return false; }
-        int cost = 10 << step;
-        int distance = 10 * (step + 1);
-        if (ResourceService.get(p, ResourceType.STAMINA) < cost) { say(p, "Estamina insuficiente (" + cost + ")."); return false; }
-        Vec3 direction = p.getLookAngle().normalize();
-        Vec3 from = p.position();
-        Vec3 to = from.add(direction.scale(distance));
-        var hit = p.serverLevel().clip(new ClipContext(p.getEyePosition(), p.getEyePosition().add(direction.scale(distance)),
-                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, p));
-        double range = Math.min(distance, hit.getLocation().distanceTo(p.getEyePosition()) - .8);
-        Vec3 destination = null;
-        for (double d = range; d >= 1; d -= .5) {
-            Vec3 candidate = from.add(direction.scale(d));
-            if (p.serverLevel().getWorldBorder().isWithinBounds(BlockPos.containing(candidate))
-                    && p.serverLevel().noCollision(p, p.getBoundingBox().move(candidate.subtract(from)))) {
-                destination = candidate; break;
+        if (p.isShiftKeyDown()) {
+            if (tag.getBoolean("dive_marked")) {
+                tag.putBoolean("dive_marked", false);
+                WilliamVfx.diveMark(p, false);
+                
+            } else {
+                tag.putBoolean("dive_marked", true);
+                tag.putString("dive_dimension", p.serverLevel().dimension().location().toString());
+                tag.putDouble("dive_x", p.getX());tag.putDouble("dive_y", p.getY());tag.putDouble("dive_z", p.getZ());
+                WilliamVfx.diveMark(p, true);
+                
             }
+            return true;
         }
-        if (destination == null) { say(p, "Sem destino seguro para Mergulhar."); return false; }
-        if (!ResourceService.trySpend(p, ResourceType.STAMINA, cost)) return false;
-        p.serverLevel().sendParticles(ParticleTypes.PORTAL, from.x, from.y + 1, from.z, 50, .5, 1, .5, .1);
-        p.teleportTo(destination.x, destination.y, destination.z);
-        p.resetFallDistance();
-        p.serverLevel().sendParticles(ParticleTypes.PORTAL, destination.x, destination.y + 1, destination.z, 50, .5, 1, .5, .1);
-        tag.putInt("dive_step", step + 1);
+        if (tag.getBoolean("dive_marked")) {
+            if (!available(tag, "dive_marked_ready", now, DIVE_MARKED_CD, p)) return false;
+            if (tag.getLong("dive_channel_until") > now) return false;
+            tag.putLong("dive_channel_until", now + 5 * SECOND);
+            WilliamVfx.channel(p, now);
+            
+            return true;
+        }
+        if (!available(tag, "dive_ready", now, DIVE_CD, p)) return false;
+        Vec3 origin = p.position(); Vec3 direction = p.getLookAngle().normalize();
+        BlockHitResult wall = p.serverLevel().clip(new ClipContext(p.getEyePosition(),
+                p.getEyePosition().add(direction.scale(25)), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, p));
+        double distance = Math.min(25, wall.getLocation().distanceTo(p.getEyePosition()) - 1);
+        Vec3 safe = null;
+        for (double d = distance; d > 1; d -= .5) {
+            Vec3 candidate = origin.add(direction.scale(d));
+            if (p.serverLevel().getWorldBorder().isWithinBounds(BlockPos.containing(candidate)) &&
+                    p.serverLevel().noCollision(p, p.getBoundingBox().move(candidate.subtract(origin)))) { safe=candidate;break; }
+        }
+        if (safe == null || !ResourceService.trySpend(p, ResourceType.STAMINA, 20)) return false;
+        p.teleportTo(safe.x, safe.y, safe.z);p.resetFallDistance();
         tag.putLong("dive_ready", now + DIVE_CD);
-        say(p, String.format(Locale.ROOT, "Mergulhar: alcance %d / custo %d.", distance, cost));
+        WilliamVfx.diveTravel(p.serverLevel(), origin, p.serverLevel(), safe);
+        sync(p);return true;
+    }
+
+    private static void completeDive(ServerPlayer p, CompoundTag tag, long now) {
+        tag.remove("dive_channel_until");
+        ResourceLocation dim = ResourceLocation.tryParse(tag.getString("dive_dimension"));
+        ServerLevel target = dim == null ? null : p.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, dim));
+        if (target == null) { return; }
+        Vec3 dst = new Vec3(tag.getDouble("dive_x"),tag.getDouble("dive_y"),tag.getDouble("dive_z"));
+        target.getChunk(BlockPos.containing(dst).getX() >> 4,BlockPos.containing(dst).getZ() >>4);
+        if (!target.noCollision(p, p.getBoundingBox().move(dst.subtract(p.position())))) {  return; }
+        ResourceService.set(p, ResourceType.STAMINA, 0);
+        tag.putLong("dive_marked_ready", now + DIVE_MARKED_CD);
+        ServerLevel originLevel = p.serverLevel();
+        Vec3 originPos = p.position();
+        p.teleportTo(target,dst.x,dst.y,dst.z,p.getYRot(),p.getXRot());
+        WilliamVfx.diveTravel(originLevel, originPos, target, dst);
+        p.resetFallDistance(); sync(p);
+    }
+
+    public static boolean dragon(ServerPlayer p) {
+        if (!require(p, 6)) return false;
+        // A Zona encerra a Reescrita Draconica quando e conjurada. Enquanto
+        // William for o conjurador dentro dela, recastar esta habilidade
+        // FINALIZA a sessao — nunca reativa a transformacao nem a interrompe
+        // apenas por cooldown. exitGroup aplica os 500 s ao encerrar a Zona.
+        if (WilliamZone.isCasterInside(p)) {
+            return WilliamZone.exitGroup(p);
+        }
+        CompoundTag tag = data(p);long now=time(p);
+        if (isUltimateActive(p) || !available(tag,"dragon_ready",now, DRAGON_CD,p)) return false;
+        tag.putBoolean("ultimate",true);tag.putLong("ultimate_until",now+60*SECOND);
+        tag.putInt("temperature",0);
+        refreshDragonFireResistance(p);
+        tag.putBoolean("had_flight",p.getAbilities().mayfly);
+        p.getAbilities().mayfly=true;p.onUpdateAbilities();
+        var armor=p.getAttribute(Attributes.ARMOR);
+        if (armor!=null) {armor.removeModifier(ARMOR_ID);armor.addTransientModifier(new AttributeModifier(ARMOR_ID,10.0,AttributeModifier.Operation.ADD_VALUE));}
+        ResourceNetworking.sendDragon(p,true);
+        WilliamVfx.dragonStart(p);
+        sync(p);return true;
+    }
+
+    /** Mantem o efeito apenas durante a ultimate, sem substituir pocoes de maior duracao. */
+    private static void refreshDragonFireResistance(ServerPlayer p) {
+        MobEffectInstance current = p.getEffect(MobEffects.FIRE_RESISTANCE);
+        if (current == null || current.getDuration() < 25) {
+            p.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 40, 0, false, false));
+        }
+    }
+
+    private static boolean active(ServerPlayer p) {
+        if (!require(p,6) || !isUltimateActive(p)) {return false;}return true;
+    }
+
+    private static boolean heat(ServerPlayer p) {
+        if (data(p).getInt("temperature") >= 4) {return false;}return true;
+    }
+
+    private static final String FIREBALL_PROJECTILE_MARK = "minefables_draconic_fireball";
+
+    /** Projétil real. O impacto é interceptado para NUNCA colocar fogo no terreno. */
+    public static boolean fireball(ServerPlayer p) {
+        if (!active(p) || !heat(p)) return false;
+        CompoundTag tag = data(p);
+        long now = time(p);
+        if (!available(tag, "fireball_ready", now, FIREBALL_CD, p) ||
+                !ResourceService.trySpend(p, ResourceType.STAMINA, 25)) return false;
+        Vec3 direction = p.getLookAngle().normalize();
+        SmallFireball projectile = new SmallFireball(p.serverLevel(), p, direction);
+        projectile.getPersistentData().putBoolean(FIREBALL_PROJECTILE_MARK, true);
+        projectile.setPos(p.getX() + direction.x * 0.8,
+                p.getEyeY() - 0.18 + direction.y * 0.8,
+                p.getZ() + direction.z * 0.8);
+        projectile.setDeltaMovement(direction.scale(1.05));
+        // 0 anula a propulsao do projetil vanilla e ele perde velocidade a cada tick.
+        // 0.06 equilibra aproximadamente o arrasto de 0.95 do SmallFireball.
+        projectile.accelerationPower = 0.06;
+        p.serverLevel().addFreshEntity(projectile);
+        tag.putLong("fireball_ready", now + FIREBALL_CD);
+        tag.putInt("temperature", tag.getInt("temperature") + 1);
+        WilliamVfx.dragonHeat(p, tag.getInt("temperature"));
+        p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BLAZE_SHOOT,
+                SoundSource.PLAYERS, 1f, 1.2f);
+        sync(p);
         return true;
     }
 
-    public static boolean slots(ServerPlayer p) {
-        if (!active(p)) return false;
-        CompoundTag tag = data(p);
-        long now = time(p);
-        if (!available(tag, "slots_ready", now, SLOTS_CD, p)) return false;
-        if (ResourceService.get(p, ResourceType.STAMINA) < 30) { say(p, "Estamina insuficiente (30)."); return false; }
-        if (!WilliamCrazySlots.summon(p, now)) return false;
-        ResourceService.trySpend(p, ResourceType.STAMINA, 30);
-        tag.putLong("slots_ready", now + SLOTS_CD);
-        return true;
+    /** Remove o projétil no impacto; evita o comportamento vanilla de colocar blocos de fogo. */
+    public static void onProjectileImpact(ProjectileImpactEvent event) {
+        if (!(event.getProjectile() instanceof SmallFireball projectile) ||
+                !projectile.getPersistentData().getBoolean(FIREBALL_PROJECTILE_MARK) ||
+                !(projectile.level() instanceof ServerLevel level)) return;
+        event.setCanceled(true);
+        Vec3 impact = event.getRayTraceResult().getLocation();
+        if (event.getRayTraceResult() instanceof EntityHitResult hit &&
+                hit.getEntity() != projectile.getOwner()) {
+            Entity target = hit.getEntity();
+            target.hurt(projectile.damageSources().fireball(projectile, projectile.getOwner()), 7f);
+            target.setRemainingFireTicks(Math.max(80, target.getRemainingFireTicks()));
+        }
+        WilliamVfx.fireballBurst(level, impact, true);
+        projectile.discard();
+    }
+
+    /** Trilha controlada pelo servidor e expiracao ao atravessar o vazio sem atingir nada. */
+    public static void onProjectileTick(net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) {
+        if (!(event.getEntity() instanceof SmallFireball fireball)
+                || !(fireball.level() instanceof ServerLevel level)
+                || !fireball.getPersistentData().getBoolean(FIREBALL_PROJECTILE_MARK)
+                || fireball.isRemoved()) return;
+        if (fireball.tickCount >= 70 || fireball.isInWater()) {
+            WilliamVfx.fireballBurst(level, fireball.position(), false);
+            fireball.discard();
+            return;
+        }
+        if (fireball.tickCount % 2 == 0) {
+            WilliamVfx.fireballTrail(level, fireball.position(), fireball.tickCount);
+        }
+    }
+
+    public static boolean steam(ServerPlayer p) {
+        if(!active(p)||!heat(p))return false;
+        CompoundTag tag=data(p);long now=time(p);
+        if(!available(tag,"steam_ready",now,STEAM_CD,p))return false;
+        Vec3 start=p.position(), direction=p.getLookAngle().normalize(), safe=null;
+        for(double d=5;d>=.5;d-=.5){Vec3 v=start.add(direction.scale(d));
+            if(p.serverLevel().noCollision(p,p.getBoundingBox().move(v.subtract(start)))){safe=v;break;}}
+        if(safe==null || !ResourceService.trySpend(p,ResourceType.STAMINA,25))return false;
+        p.teleportTo(safe.x,safe.y,safe.z);p.resetFallDistance();
+        WilliamVfx.steam(p, start, safe);
+        for(LivingEntity target:p.serverLevel().getEntitiesOfClass(LivingEntity.class,p.getBoundingBox().inflate(2),e->e!=p))
+            target.push(direction.x*2.2, .8+Math.max(0,direction.y),direction.z*2.2);
+        tag.putLong("steam_ready",now+STEAM_CD);tag.putInt("temperature",tag.getInt("temperature")+1);
+        WilliamVfx.dragonHeat(p,tag.getInt("temperature"));
+        sync(p);return true;
+    }
+
+    public static boolean overload(ServerPlayer p) {
+        if(!active(p))return false;
+        CompoundTag tag=data(p);long now=time(p);
+        if(!available(tag,"overdrive_ready",now,OVERDRIVE_CD,p))return false;
+        tag.putLong("overdrive_ready",now+OVERDRIVE_CD);
+        tag.putLong("ultimate_until",tag.getLong("ultimate_until")+5*SECOND);
+        ResourceService.set(p,ResourceType.STAMINA,0);tag.putInt("temperature",0);
+        // Vortice de aproximadamente 15 blocos de diametro: tres bracos
+        // espirais de fogo vanilla. Mantem um miolo livre para o conjurador.
+        for (int x=-8; x<=8; x++) for (int z=-8; z<=8; z++) {
+            double radius = Math.hypot(x,z);
+            if (radius < 2.4 || radius > 7.6) continue;
+            double spiral = Math.atan2(z,x) + radius * 0.53;
+            // Tres bracos com espessura controlada, nao um quadrado de chamas.
+            if (Math.cos(3.0 * spiral) < 0.48) continue;
+            BlockPos at = p.blockPosition().offset(x,0,z);
+            if (p.serverLevel().isEmptyBlock(at)
+                    && p.serverLevel().getBlockState(at.below()).isSolidRender(p.serverLevel(),at.below()))
+                p.serverLevel().setBlockAndUpdate(at,Blocks.FIRE.defaultBlockState());
+        }
+        tag.putLong("overload_vortex_until", now+40L);
+        renderOverloadVortex(p, now);
+        WilliamVfx.overload(p);
+        sync(p);return true;
+    }
+
+    /** Particulas animadas em espiral por dois segundos apos Sobrecarga. */
+    private static void renderOverloadVortex(ServerPlayer p,long now) {
+        ServerLevel level = p.serverLevel();
+        double phase = (now % 40) * 0.32;
+        for (int arm = 0; arm < 3; arm++) {
+            for (int i=0; i<48; i++) {
+                double progress = i / 47.0;
+                double radius = 0.9 + 6.6 * progress;
+                double angle = phase + arm * Math.PI * 2.0 / 3.0 + progress * Math.PI * 3.0;
+                double x = p.getX() + Math.cos(angle) * radius;
+                double y = p.getY() + 0.25 + (1.0-progress)*3.5;
+                double z = p.getZ() + Math.sin(angle) * radius;
+                level.sendParticles(i % 4 == 0 ? ParticleTypes.SOUL_FIRE_FLAME : ParticleTypes.FLAME,
+                        x,y,z,1,0,0,0,0.015);
+            }
+        }
     }
 
     public static boolean zone(ServerPlayer p) {
-        // A saida nao pode depender da Ultimate permanecer ativa.
-        if (WilliamZone.isInside(p)) return WilliamZone.exitGroup(p);
-        if (!active(p)) return false;
-        return WilliamZone.enter(p);
+        if (!active(p) || !heat(p) || !available(data(p),"zone_ready",time(p),0,p))return false;
+        if (!WilliamZone.enter(p))return false;
+        // Zona acorta a ultimate; recarga de 500s apenas apos fim da Zona.
+        data(p).putBoolean("zone_pending_cooldown",true);
+        endUltimate(p);
+        sync(p);return true;
+    }
+
+    public static void finishZoneCooldown(ServerPlayer p) {
+        if (!data(p).getBoolean("zone_pending_cooldown")) return;
+        data(p).putBoolean("zone_pending_cooldown", false);
+        data(p).putLong("dragon_ready", time(p) + ZONE_CD);
+        sync(p);
+    }
+
+    /** Morte do conjurador encerra a Zona imediatamente e inicia 500s de recarga. */
+    public static void finishZoneCooldownOnDeath(ServerPlayer p) {
+        CompoundTag tag = data(p);
+        tag.putBoolean("zone_pending_cooldown", false);
+        tag.putBoolean("ultimate", false);
+        tag.putLong("dragon_ready", time(p) + ZONE_CD);
+        // O novo jogador recebe este NBT em PlayerEvent.Clone.
+    }
+
+    public static void onDeath(LivingDeathEvent event) {
+        if (event.getEntity() instanceof ServerPlayer dead) WilliamZone.onPlayerDeath(dead);
     }
 
     public static void endUltimate(ServerPlayer p) {
         CompoundTag tag = data(p);
         if (!tag.getBoolean("ultimate")) return;
         tag.putBoolean("ultimate", false);
+        if (!tag.getBoolean("zone_pending_cooldown"))
+            tag.putLong("dragon_ready",time(p)+DRAGON_CD);
         p.getAbilities().mayfly = tag.getBoolean("had_flight") || p.isCreative() || p.isSpectator();
         if (!p.getAbilities().mayfly) p.getAbilities().flying = false;
         p.onUpdateAbilities();
         var armor = p.getAttribute(Attributes.ARMOR);
         if (armor != null) armor.removeModifier(ARMOR_ID);
         WilliamCrazySlots.restore(p);
-        say(p, "Dragon Override encerrado.");
+        
         ResourceNetworking.sendDragon(p, false);
         p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_DEACTIVATE,
                 SoundSource.PLAYERS, .75f, .8f);
@@ -518,12 +747,25 @@ public final class WilliamKit {
 
     public static void onTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer p)) return;
+        // Tick da Zona para TODOS os players. Participantes de outras Fabulas
+        // tambem podem encerrar a Zona ao cair no centro do vortice.
+        long now = time(p);
+        WilliamZone.tickParticipant(p, now);
         // Limpeza defensiva mesmo apos trocar a Fabula via ferramentas de debug.
         WilliamCrazySlots.purgeExpired(p);
         if (!isWilliam(p)) return;
-        long now = time(p);
         CompoundTag tag = data(p);
+        executeDelayedHits(p,now);
+        if (tag.getLong("overload_vortex_until") > now && now % 2L == 0L)
+            renderOverloadVortex(p,now);
+        if (tag.getLong("overload_vortex_until") > 0 && now >= tag.getLong("overload_vortex_until"))
+            tag.remove("overload_vortex_until");
+        if (tag.getLong("dive_channel_until") > 0) {
+            if (now >= tag.getLong("dive_channel_until")) completeDive(p,tag,now);
+            else if (now % 4 == 0) WilliamVfx.channel(p,now);
+        }
         if (tag.getBoolean("ultimate") && now >= tag.getLong("ultimate_until")) endUltimate(p);
+        if (isUltimateActive(p) && now % 20 == 0) refreshDragonFireResistance(p);
         WilliamCrazySlots.tick(p, now);
         if (tag.getBoolean("resonance")) {
             int currentTier = tier(p);
@@ -533,12 +775,14 @@ public final class WilliamKit {
                 sync(p);
             }
             if (now % 20 == 0) {
-                if (!ResourceService.trySpend(p, ResourceType.STAMINA, 1)) {
+                if (!isUltimateActive(p) && !ResourceService.trySpend(p, ResourceType.STAMINA, 1)) {
                     stopResonance(p);
-                    say(p, "Ressonância encerrada: Estamina esgotada.");
+                    
                 } else applyResonance(p);
             }
         }
+        if (tag.getBoolean("resonance") && now % 8 == 0)
+            WilliamVfx.resonanceIdle(p, tier(p), now);
         if (isUltimateActive(p) && now % 10 == 0) {
             p.serverLevel().sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + 1,
                     p.getZ(), 8, .35, .65, .35, .01);
@@ -569,8 +813,16 @@ public final class WilliamKit {
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer p) {
             CompoundTag tag = data(p);
+            // Recuperacao segura apos logout/crash dentro da Zona.
+            if (WilliamZone.isInside(p)) {
+                WilliamZone.exitGroup(p);
+                finishZoneCooldown(p);
+            }
+            // Logout, crash ou morte durante a Zona nao deixam a recarga travada.
+            if (tag.getBoolean("zone_pending_cooldown")) finishZoneCooldown(p);
             // Em um reinicio nao continuamos ultimates nem buffs temporarios.
             if (tag.getBoolean("ultimate")) endUltimate(p);
+            tag.remove("dive_channel_until");
             if (tag.getBoolean("resonance")) stopResonance(p);
             WilliamCrazySlots.restore(p);
             if (isWilliam(p) && tag.getBoolean("impetuo_armed")) ResourceNetworking.sendImpetuo(p, true);
@@ -580,14 +832,19 @@ public final class WilliamKit {
 
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer p) {
+            if (WilliamZone.isInside(p)) WilliamZone.exitGroup(p);
             endUltimate(p);
             stopResonance(p);
+            PENDING_HITS.remove(p.getUUID());
             ResourceNetworking.sendImpetuo(p, false);
         }
     }
 
     public static void onClone(PlayerEvent.Clone event) {
         if (!(event.getEntity() instanceof ServerPlayer next) || !(event.getOriginal() instanceof ServerPlayer original)) return;
+        // Salvaguarda caso outro mod altere a sequencia dos eventos de morte.
+        // onPlayerDeath pode ser chamada novamente: a marca SOURCE ja foi removida.
+        if (event.isWasDeath()) WilliamZone.onPlayerDeath(original);
         CompoundTag old = original.getPersistentData().getCompound(ROOT);
         CompoundTag copied = old.copy();
         copied.putBoolean("resonance", false);
@@ -595,11 +852,15 @@ public final class WilliamKit {
         copied.remove("impetuo_armed");
         copied.remove("resonance_start");
         copied.remove("resonance_tier");
+        copied.remove("dive_channel_until");
         next.getPersistentData().put(ROOT, copied);
     }
 
     public static void onRespawn(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer p) {
+            WilliamZone.recoverAfterRespawn(p);
+            // Se a morte ocorreu durante a Zona, a recarga permanece no clone.
+            if (data(p).getBoolean("zone_pending_cooldown")) finishZoneCooldownOnDeath(p);
             ResourceNetworking.sendImpetuo(p, false);
             sync(p);
         }
@@ -614,18 +875,56 @@ public final class WilliamKit {
         sync(p);
     }
 
+    /**
+     * Comando de depuracao (OP): reinicia todas as recargas do William.
+     * Se a Citacao ainda estiver com uma arma temporaria, restaura primeiro
+     * o item original; assim o cooldown nao sera recriado ao terminar a Citacao.
+     */
+    public static void resetCooldowns(ServerPlayer player) {
+        CompoundTag tag = data(player);
+        WilliamCrazySlots.restore(player);
+        String[] readyKeys = {
+                "resonance_ready", "impetuo_ready", "walker_ready",
+                "slots_ready", "dive_ready", "dive_marked_ready", "dragon_ready",
+                "fireball_ready", "steam_ready", "overdrive_ready", "zone_ready"
+        };
+        for (String key : readyKeys) tag.remove(key);
+        // Uma Zona em andamento poderia recolocar a recarga ao terminar.
+        // Reset OP tambem cancela essa recarga pendente, sem fechar a Zona.
+        tag.remove("zone_pending_cooldown");
+        sync(player);
+    }
+
     public static void registerCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("minefables_william")
                 .then(Commands.literal("status").executes(ctx -> {
                     ServerPlayer p = ctx.getSource().getPlayerOrException();
                     CompoundTag tag = data(p);
                     ctx.getSource().sendSuccess(() -> Component.literal(
-                            "William nivel " + level(p) + "/5 | Ressonancia " +
+                            "William nivel " + level(p) + "/6 | Ressonancia " +
                                     (tag.getBoolean("resonance") ? "ativa (" + tier(p) + ")" : "inativa") +
                                     " | Dragon Override " + (tag.getBoolean("ultimate") ? "ativo" : "inativo")), false);
                     return Command.SINGLE_SUCCESS;
                 }))
-                .then(Commands.literal("sair_zona").executes(ctx ->
-                        WilliamZone.exit(ctx.getSource().getPlayerOrException()) ? 1 : 0)));
+                .then(Commands.literal("reset_cooldowns")
+                        .requires(source -> source.hasPermission(2))
+                        .executes(ctx -> {
+                            ServerPlayer target = ctx.getSource().getPlayerOrException();
+                            resetCooldowns(target);
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "Cooldowns de William zerados para " + target.getGameProfile().getName() + "."), true);
+                            return Command.SINGLE_SUCCESS;
+                        })
+                        .then(Commands.argument("jogador", EntityArgument.player()).executes(ctx -> {
+                            ServerPlayer target = EntityArgument.getPlayer(ctx, "jogador");
+                            resetCooldowns(target);
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "Cooldowns de William zerados para " + target.getGameProfile().getName() + "."), true);
+                            return Command.SINGLE_SUCCESS;
+                        })))
+                .then(Commands.literal("sair_zona").requires(source -> source.hasPermission(2)).executes(ctx ->
+                        WilliamZone.exit(ctx.getSource().getPlayerOrException()) ? 1 : 0))
+                .then(Commands.literal("instalar_zona").requires(source -> source.hasPermission(2)).executes(ctx ->
+                        WilliamZone.installArena(ctx.getSource().getPlayerOrException()) ? 1 : 0)));
     }
 }

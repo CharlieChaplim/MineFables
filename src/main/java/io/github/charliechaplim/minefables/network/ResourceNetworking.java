@@ -17,7 +17,7 @@ public final class ResourceNetworking {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Protocolo 4: visuais Dragon Install e anel do Impetuo.
-        var registrar = event.registrar("4");
+        var registrar = event.registrar("5");
         registrar.playToClient(ResourceSyncPayload.TYPE, ResourceSyncPayload.STREAM_CODEC,
                 (payload, context) -> ClientResourceState.accept(payload));
         registrar.playToClient(WilliamStatusPayload.TYPE, WilliamStatusPayload.STREAM_CODEC,

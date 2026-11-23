@@ -39,6 +39,11 @@ public final class ClientAbilitySelection {
         return AbilityRegistry.forCharacter(character, level, ultimateMode()).size();
     }
 
+    public static void select(int next) {
+        refreshState();
+        if (next >= 0 && next < count()) index = next;
+    }
+
     public static void cycle(int direction) {
         refreshState();
         int count = count();

@@ -1,0 +1,66 @@
+{
+  "parent": "builtin/entity",
+  "textures": {
+    "particle": "minefables:item/fulgor"
+  },
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [
+        0,
+        -90,
+        0
+      ],
+      "translation": [
+        0.75,
+        -16,
+        2.25
+      ],
+      "scale": [
+        1.82422,
+        1.82422,
+        1.82422
+      ]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [
+        0,
+        90,
+        0
+      ],
+      "translation": [
+        -0.75,
+        -16,
+        2.25
+      ],
+      "scale": [
+        1.82422,
+        1.82422,
+        1.82422
+      ]
+    },
+    "firstperson_righthand": {
+      "rotation": [
+        -27.75,
+        -90,
+        0
+      ],
+      "translation": [
+        0.5,
+        -8.75,
+        8
+      ]
+    },
+    "firstperson_lefthand": {
+      "rotation": [
+        -27.75,
+        90,
+        0
+      ],
+      "translation": [
+        1.5,
+        -8.75,
+        8
+      ]
+    }
+  }
+}

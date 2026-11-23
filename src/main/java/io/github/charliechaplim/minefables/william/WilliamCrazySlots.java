@@ -3,7 +3,6 @@ package io.github.charliechaplim.minefables.william;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
@@ -37,7 +36,6 @@ public final class WilliamCrazySlots {
         CompoundTag tag = data(p);
         if (tag.contains("slots_saved")) {
             if (tag.getLong("slots_until") > now) {
-                p.displayClientMessage(Component.literal("Crazy Slots ainda esta ativo."), true);
                 return false;
             }
             restore(p);
@@ -58,9 +56,9 @@ public final class WilliamCrazySlots {
             arrow.set(DataComponents.CUSTOM_DATA, CustomData.of(marker.copy()));
             if (!p.getInventory().add(arrow)) p.drop(arrow, false);
         }
-        tag.putLong("slots_until", now + 100); // 5 segundos
+        tag.putLong("slots_until", now + 300); // 15 segundos
         tag.putInt("slots_weapon", selection);
-        p.displayClientMessage(Component.literal("Crazy Slots: " + weapon.getHoverName().getString() + " (5s)"), true);
+        WilliamVfx.citation(p, true);
         return true;
     }
 
@@ -140,6 +138,11 @@ public final class WilliamCrazySlots {
             if (occupant.isEmpty()) p.getInventory().setItem(slot, original);
             else if (!original.isEmpty() && !p.getInventory().add(original)) p.drop(original, false);
         } else if (!original.isEmpty() && !p.getInventory().add(original)) p.drop(original, false);
+        WilliamVfx.citation(p, false);
+        // O tempo de recarga comeca quando a arma some, nao ao conjurar.
+        // Tambem protege restauracoes antecipadas (troca de slot/menu/logout).
+        long now = p.getServer().overworld().getGameTime();
+        tag.putLong("slots_ready", now + 15 * 20L);
         tag.remove("slots_saved");
         tag.remove("slots_until");
         tag.remove("slots_index");

@@ -1,0 +1,9 @@
+MineFables Impetuo: V9, retorno integral ao posicionamento da v1.
+
+Mudanca unica: ocultar o aro em primeira pessoa quando qualquer uma das maos segura item.
+Posicao, escala, rotacao, animacao e desenho do aro: identicos a v1.
+Renderizacao em terceira pessoa nao foi alterada.
+
+Instalacao: extrair a pasta src na raiz do repositorio, sobrescrevendo o Java.
+Executar gradlew.bat compileJava e gradlew.bat runClient.
+Testar com as duas maos vazias e Impetuo preparado; equipar qualquer item deve ocultar o aro na primeira pessoa.
