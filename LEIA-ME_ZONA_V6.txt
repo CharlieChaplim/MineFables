@@ -1,0 +1,32 @@
+MineFables — Vértice Vazio: saída antecipada v6
+===============================================
+
+Este patch se aplica SOBRE a v5 (instalação automática da Zona) e a v3 da roda/reset de cooldowns, e altera somente:
+- WilliamKit.java
+- WilliamZone.java
+
+CORREÇÕES
+1. O tick de participantes da Zona agora roda para TODOS os jogadores, mesmo que
+   nao tenham William como fabula. Antes havia um `return` que os ignorava.
+2. A queda no buraco central aciona a saída antes do void letal do End:
+   X e Z dentro de +/-12 blocos, Y abaixo de 45 e em queda (ou abaixo de Y=10).
+3. Somente outro jogador aciona o encerramento antecipado. O conjurador William
+   mantém a regra de voltar para a arena quando cai no void.
+4. Não muda nem a arena NBT, nem a dimensão End, nem os cooldowns.
+5. Preserva o comando OP /minefables_william reset_cooldowns.
+
+INSTALAÇÃO
+- Faça backup/commit de seu estado atual.
+- Extraia o ZIP na raiz do MineFables, substituindo os dois arquivos Java.
+- Execute: .\gradlew.bat compileJava
+- Execute: .\gradlew.bat runClient
+
+TESTE MULTIPLAYER
+- Entre na Zona com William e outro jogador (qualquer personagem).
+- O OUTRO jogador deve cair pelo centro: todos voltam antes de Y=0.
+- Em seguida teste William caindo: deve reaparecer na arena, não sair.
+- Verifique o cooldown ao fim (500s) e a saída por tempo (60s).
+- Se estiver testando sozinho COM William, cair no centro não encerra a Zona:
+  essa é a mecânica definida para o conjurador.
+
+Limitação: não houve compilação Gradle nem execução dentro do Minecraft aqui.

@@ -1,0 +1,39 @@
+MineFables — Zona Fabular e Fulgor (patch incremental v4)
+Minecraft 1.21.1 | NeoForge | GeckoLib 4.9.3
+
+APLICAÇÃO
+1. Faça backup do mundo e do repositório.
+2. Extraia o ZIP na raiz do repositório MineFables, mesclando src/.
+3. Rode .\gradlew.bat compileJava e depois .\gradlew.bat runClient.
+4. Reinicie o mundo para a nova ambientação da dimensão (type minecraft:the_end).
+5. A arena já instalada continua valendo; em mundo novo, instalar uma vez:
+   /minefables_william instalar_zona
+
+ZONA FABULAR
+- Todos os tipos de entidades vivos no raio esférico de 25 blocos são candidatos a teleporte (incluindo itens e mobs), exceto a entidade conjuradora, que é adicionada separadamente.
+- Destinos são calculados ANTES de executar qualquer teleporte, no topo de blocos azuis e lanternas da estrutura instalada; se não houver espaço suficiente, a entrada é cancelada.
+- Sem novos pisos de obsidiana: os pads já criados por versões antigas podem continuar no mundo, mas não serão usados como destino.
+- O conjurador entra perto do lado -X e os demais no lado +X; todos acima de blocos com dois blocos livres na vertical.
+- A duração e a mecânica de retorno/cooldown da Zona seguem as regras do patch anterior.
+- O sistema de clash e verificações para entidades excepcionalmente grandes permanecem para etapas futuras.
+- Atenção: mudança visual do tipo da dimensão poderá exigir reabrir o mundo; TESTE em cópia do save.
+
+FULGOR
+- Item agora implementa GeoItem (GeckoLib 4).
+- Modelo de mão: geo/item/fulgor.geo.json do arquivo originalmente enviado, textura fulgor_geo.png sem conversão para OBJ.
+- GUI, item dropado e moldura (fixed): pixel art já existente, por modelo separado.
+- Mantive durabilidade, dano, chance de crítico e alcance do rework.
+- Não há animações próprias neste momento, só geometria estática GeckoLib.
+- Teste em F5 e F1 segurando a Fulgor com a mão principal e, depois, no inventário, moldura e drop.
+
+ARQUIVOS ANTIGOS OPCIONAIS, AGORA NÃO UTILIZADOS
+src/main/resources/assets/minefables/models/item/fulgor_3d.obj
+src/main/resources/assets/minefables/models/item/fulgor_3d.mtl
+src/main/resources/assets/minefables/models/item/fulgor_3d.json
+src/main/resources/assets/minefables/textures/item/fulgor_3d.png
+Você pode removê-los depois de validar no jogo; o ZIP incremental não apaga arquivos locais.
+
+VALIDAÇÃO
+- Sintaxe Java (50 arquivos) e JSON validados; fonte original do modelo e NBT inspecionados.
+- Simulação de seleção de superfícies com dados reais do NBT: conjurador + 12 entidades em pontos distintos válidos.
+- Compilação Gradle e renderização do jogo não executadas neste ambiente.

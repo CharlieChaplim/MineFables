@@ -1,0 +1,673 @@
+diff --git a/LEIA-ME_DRAGON_INSTALL.md b/LEIA-ME_DRAGON_INSTALL.md
+deleted file mode 100644
+index c4039bd..0000000
+--- a/LEIA-ME_DRAGON_INSTALL.md
++++ /dev/null
+@@ -1,77 +0,0 @@
+-# MineFables — Dragon Install: modelo visual da armadura (v1)
+-
+-**Alvo:** Minecraft 1.21.1 / NeoForge 21.1.x / Java 21 / GeckoLib 4.9.3.
+-
+-## Conteúdo
+-
+-- Projeto Blockbench original: `art/source/william/dragon_install/CustomArmor.bbmodel`.
+-- Textura-fonte original: `art/source/william/dragon_install/texture.png` (128 × 128).
+-- Modelo exportado para GeckoLib: `src/main/resources/assets/minefables/geo/william/dragon_install.geo.json`.
+-- Renderização geométrica da skin do modelo: `src/main/resources/assets/minefables/mesh/william/dragon_install_mesh.json` e `textures/entity/william/dragon_install.png`.
+-- Camada de render: `DragonInstallLayer.java`; carregador da malha: `DragonInstallMesh.java`.
+-- Mixin da armadura: `HideVanillaArmorMixin.java` (oculta somente a renderização normal da armadura equipada enquanto o efeito estiver ativo).
+-- Pacote de rede: `DragonInstallStatePayload`, separado do estado local da HUD; jogadores próximos também veem a mudança.
+-- `tools/dragon_install/exportar_modelo.py` permite reexportar o modelo depois de modificações no Blockbench.
+-
+-**Atenção sobre a arte recebida:** o arquivo contém geometria exportável em `armorHead` e `armorRightArm`; `armorBody`, `armorLeftArm`, `armorLeftLeg`, `armorRightLeg`, `armorLeftBoot`, `armorRightBoot` estão vazios. Portanto, na primeira versão somente cabeça e braço direito terão a armadura modelada. O sistema não inventa geometrias ausentes. Se quiser a armadura completa, adicione-as no Blockbench e reexporte.
+-
+-## Instalação (a partir do código do William v2)
+-
+-1. Com Git, confirme que está na branch desejada e que `git status` não exibe alterações inesperadas.
+-2. Extraia o ZIP **na raiz do repositório**. O pacote cria a pasta `dragon_install_overlay` com arquivos novos, mas não substitui arquivos Java existentes. Também cria `aplicar_dragon_install.py`.
+-3. Instale executando **um** destes comandos, na raiz do repositório:
+-
+-   ```powershell
+-   py -3 .\aplicar_dragon_install.py
+-   # Ou, se 'py' não existir e Python estiver disponível:
+-   python .\aplicar_dragon_install.py
+-   ```
+-
+-4. O instalador adiciona os arquivos novos e atualiza pontualmente `build.gradle`, `src/main/templates/META-INF/neoforge.mods.toml`, `MineFables.java`, `MineFablesClient.java`, `ResourceNetworking.java`, `WilliamKit.java`.
+-5. Antes de modificar, ele valida a presença dos pontos de integração; caso a estrutura tenha mudado, para com erro. Cópias originais dos arquivos editados ficam em `.dragon_install_backup`. Ele não altera a correção de `ClipContext`.
+-6. Compile:
+-
+-   ```powershell
+-   .\gradlew.bat --refresh-dependencies compileJava
+-   .\gradlew.bat runClient
+-   ```
+-
+-7. Depois, confira `git status`, apague `dragon_install_overlay`, `aplicar_dragon_install.py` e `.dragon_install_backup` caso não queira versioná-los, e só então faça o commit do `src`, `art`, `tools`, `build.gradle` e `src/main/templates`.
+-
+-**Servidor e clientes normais:** GeckoLib deve estar instalado como mod separado. É obrigatório (dependência `geckolib` >= 4.9.3), e o Gradle somente o fornece automaticamente no ambiente de desenvolvimento. Não o incorpore ao JAR do MineFables.
+-
+-## Testes dentro do jogo
+-
+-1. Entre em um mundo novo e selecione William: `/minefables character set william`.
+-2. Suba para o nível 5 com **quatro páginas**: `/give @p minefables:william_page 4` e use-as.
+-3. Equipe uma armadura vanilla fácil de reconhecer (ex.: diamante). Antes da ultimate, a armadura vanilla deve aparecer normalmente.
+-4. Selecione Dragon Override (normalmente com `[` e `]`), pressione `R` e use **F5** para ver o corpo. A malha personalizada da cabeça e do braço direito deve aparecer; a armadura vanilla deve desaparecer visualmente.
+-5. Confirme pelo inventário que as peças equipadas permanecem nos mesmos slots e que os valores de armadura e encantamentos não foram alterados pelo visual.
+-6. Aguarde a ultimate terminar. A armadura vanilla volta a aparecer, e o visual de Dragon Install desaparece.
+-7. Repita com o jogador sem peças equipadas e com armadura encantada.
+-8. Faça teste em multiplayer com outro jogador observando William antes, durante e depois da transformação; teste também um jogador que chega ao alcance de renderização depois da ultimate ter sido ativada.
+-9. Teste logout/login, reset com Maçã de Debugger, troca de dimensão, morte e modelos de skin normal e slim.
+-10. Se a armadura desaparecer para outros personagens ou não voltar quando a ultimate termina, trate como erro do Mixin/cache: envie `latest.log` e o erro exato de Gradle.
+-
+-## Arte e animações
+-
+-O modelo recebido **não contém animações**. Esta primeira implementação usa uma `RenderLayer` própria que renderiza os cubos já modelados sobre as partes móveis do `PlayerModel`, mantendo caminhada, giro de cabeça e braços em movimento. Adicionamos e inicializamos GeckoLib 4.9.3 para futuros controladores e animações GeckoLib. A geometria `.geo.json` é entregue, mas **a renderização atual usa o mesh gerado** (e não `GeoArmorRenderer`, que normalmente é usado com itens de armadura equipáveis). Isso é intencional: Dragon Install não deve ocupar slots nem trocar itens no servidor.
+-
+-**Visualização em primeira pessoa:** o modelo é aplicado ao renderizador do jogador (terceira pessoa e prévia do jogador no inventário); ele ainda não substitui a malha da mão renderizada em primeira pessoa.
+-
+-## Editando o modelo depois
+-
+-1. Abra `art/source/william/dragon_install/CustomArmor.bbmodel` no Blockbench.
+-2. Mantenha a textura `texture.png` e adicione partes faltantes nos grupos `armor...` corretos.
+-3. Salve `.bbmodel` e o `texture.png` na pasta-fonte.
+-4. Na raiz do repositório execute: `py -3 tools/dragon_install/exportar_modelo.py`.
+-5. O script gera novos `.geo.json`, `.mesh.json` e atualiza a textura do jogo. Reabra o mundo ou recarregue recursos com F3+T para aplicar a alteração.
+-6. Se adicionar animações, exporte-as em `assets/minefables/animations/william/` e crie um renderer GeckoLib específico antes de tentar reproduzi-las; o renderer estático não toca animações `.animation.json` sozinho.
+-
+-## Observações técnicas
+-
+-- O estado da ultimate é decidido no servidor; o cliente só recebe um pacote booleano visual. Outros jogadores recebem sincronização periódica e ao iniciar acompanhamento da entidade.
+-- Nenhum item de armadura é removido, alterado ou equipado pelo patch. O bônus +10 de armadura do William continua separado do visual.
+-- O Mixin cancela apenas a **camada** `HumanoidArmorLayer` para William em ultimate, nunca o render do próprio jogador.
+-- O protocolo de rede é alterado de `2` para `3`; servidor e cliente precisam estar na mesma revisão.
+-- Este pacote foi testado quanto à integridade dos arquivos, JSON e sintaxe Java e quanto à aplicação repetida do instalador em uma cópia reconstruída a partir do código William v2. **Não houve execução de `compileJava` nem teste no Minecraft neste ambiente**, portanto a compilação e integração real ainda precisam ser confirmadas por você.
+diff --git a/LEIA-ME_DRAGON_INSTALL_SEM_PYTHON.md b/LEIA-ME_DRAGON_INSTALL_SEM_PYTHON.md
+deleted file mode 100644
+index 994bec7..0000000
+--- a/LEIA-ME_DRAGON_INSTALL_SEM_PYTHON.md
++++ /dev/null
+@@ -1,46 +0,0 @@
+-# MineFables — Dragon Install, instalação sem Python
+-
+-Alvo: Minecraft 1.21.1, NeoForge 21.1.x, Java 21, GeckoLib 4.9.3.
+-
+-## Como instalar
+-
+-Você já extraiu a versão antiga do instalador? Se ela falhou antes de editar, pode remover `aplicar_dragon_install.py` e `dragon_install_overlay/` da raiz. Não use o script antigo.
+-
+-1. Faça `git status` e garanta que a branch esteja correta. Se tiver mudanças não commitadas, faça um commit ou backup. **Não é necessário nem recomendado reverter a correção de ClipContext**.
+-2. Extraia este ZIP **na raiz do repositório**. Os arquivos novos vão diretamente para `src/` e `art/`.
+-3. Rode na raiz:
+-
+-   ```powershell
+-   git apply --check .\dragon_install.patch
+-   git apply .\dragon_install.patch
+-   .\gradlew.bat --refresh-dependencies compileJava
+-   .\gradlew.bat runClient
+-   ```
+-
+-4. `git apply --check` não deve retornar erro. Caso retorne, **não use** `--reject` nem sobrescreva Java: provavelmente seus arquivos locais estão diferentes dos que vieram do patch William v2. Envie a mensagem de erro e os arquivos de conflito para um ajuste pontual.
+-5. `git status` e `git diff --check`, depois `git add src art build.gradle` para preparar o commit. Não adicione `dragon_install.patch` a menos que queira armazená-lo como documentação.
+-
+-## O que este pacote faz
+-
+-- Registra o GeckoLib 4.9.3 no repositório de dependências e na lista de dependências do mod;
+-- Inicializa a biblioteca na classe principal;
+-- Introduz camada 3D e Mixin para não mostrar armadura vanilla durante Dragon Override;
+-- Guarda o estado visual da ultimate para cada jogador e sincroniza também para jogadores próximos;
+-- Preserva a armadura e os atributos no inventário;
+-- Inclui a arte original `.bbmodel`, `.geo.json` e uma malha JSON exportada da arte original.
+-
+-## Limitações conhecidas
+-
+-- O modelo enviado só contém geometria em `armorHead` e `armorRightArm`.
+-- O GeckoLib é inicializado, mas a camada atual usa a malha estática customizada; ainda não toca animações GeckoLib nem substitui braços em primeira pessoa.
+-- Não foi executado Gradle nem teste no Minecraft neste ambiente; foi testada a aplicação do arquivo `.patch` sobre as bases dos pacotes William v1/v2.
+-- Este pacote não inclui `exportar_modelo.py`, por sua preferência por não ter Python no repositório. Ao editar o `.bbmodel`, exporte manualmente pelo Blockbench; uma futura automação Gradle/Java poderá substituí-lo.
+-- Não foi criado nenhum item equipável. É uma sobreposição visual durante a ultimate.
+-
+-## Testes mínimos
+-
+-1. Equipe armadura de diamante com William e confira a aparência normal.
+-2. Ative Dragon Override: a armadura vanilla é ocultada, a arte custom aparece, os itens e a armadura defensiva continuam equipados.
+-3. Espere acabar: a armadura vanilla retorna.
+-4. Faça teste multiplayer, morte, relog e skin slim/normal.
+-5. Se aparecer erro no Gradle, capture **o primeiro erro `error:`** do compilador.
+diff --git a/LEIA-ME_WILLIAM.md b/LEIA-ME_WILLIAM.md
+deleted file mode 100644
+index 55b7c50..0000000
+--- a/LEIA-ME_WILLIAM.md
++++ /dev/null
+@@ -1,112 +0,0 @@
+-# MineFables — William (pacote de integração, versão 1)
+-
+-**Alvo:** Minecraft Java 1.21.1 / NeoForge 21.1.x / Java 21.
+-**Repositório:** https://github.com/CharlieChaplim/MineFables
+-
+-## Escopo e compatibilidade
+-
+-Este ZIP é **um patch de arquivos `src/`**, NÃO é um mod `.jar` e NÃO é um repositório completo. Foi construído com base nos últimos arquivos de desenvolvimento compartilhados no projeto MineFables, especialmente as etapas **Aula 4 (habilidades e HUD)** e **Aula 5 (Maçã de Debugger)**. Não foi possível compilar o projeto completo nem comparar todos os arquivos com a versão exata disponível no GitHub. Faça backup e aplique numa **branch de teste**, preferencialmente depois de conferir se o seu checkout já inclui as aulas 4 e 5.
+-
+-Não remove texturas, código original fora dos arquivos incluídos, ou receitas existentes. Substitui `CharacterBootstrap.java` para deixar só **nove personagens jogáveis + Teste** (técnico), conforme novo elenco. Altera os recursos de outros personagens para a distribuição discutida. `Kalista` continua com Mana seguindo o cadastro anterior, já que não houve confirmação nova dela.
+-
+-## Baixar e aplicar (Windows PowerShell)
+-
+-Instale Git e JDK 21; garanta que `git` e `java -version` funcionem no terminal. Na pasta de trabalho desejada:
+-
+-```powershell
+-git clone https://github.com/CharlieChaplim/MineFables.git
+-cd MineFables
+-git switch -c feature/william-kit
+-# Confirme se a base inclui as atualizações recentes antes de mesclar.
+-git status
+-```
+-
+-Extraia **o conteúdo do ZIP na raiz do repositório**, mesclando a pasta `src` com a `src` existente. Em PowerShell, assumindo que o arquivo esteja em Downloads:
+-
+-```powershell
+-Expand-Archive -Path "$env:USERPROFILE\Downloads\MineFables_William_Kit_v1.zip" -DestinationPath . -Force
+-```
+-
+-**Atenção:** o comando também coloca esta documentação e o arquivo de verificação no repositório; pode removê-los depois. O `-Force` substitui arquivos homônimos. O repositório pode ter evoluído desde os patches anteriores: em caso de conflito, não sobrescreva trabalho não salvo.
+-
+-Compile e rode:
+-
+-```powershell
+-.\gradlew.bat compileJava
+-.\gradlew.bat runClient
+-```
+-
+-Se faltar o Gradle Wrapper, veja as instruções do README do repositório. Se aparecer erro de Java/NeoForge, copie a **primeira falha de compilação**, inclusive a classe, método e número da linha. Não publique o patch antes de compilar e validar o comportamento em jogo.
+-
+-## Comandos e teclas
+-
+-- `/minefables character list` — deve exibir **10 entradas** (9 do elenco + `teste`).
+-- `/minefables character set william` — escolha William num **mundo novo**. A escolha é permanente, exceto pelo item de depuração.
+-- `/minefables character get` — confirma qual Fábula está selecionada.
+-- `/minefables resources` — mostra recursos disponíveis.
+-- `/minefables resources set stamina 100` — OP: enche Estamina (se a sintaxe de comando ainda for a da Aula 4).
+-- `/give @p minefables:william_page 4` — fornece páginas; clique direito para subir de nível 1→5.
+-- `/give @p minefables:debugger_apple` — reseta Fábula para trocar de personagem, **exige OP**.
+-- `/minefables_william status` — mostra nível, potência e Ultimate ativa.
+-- `/minefables_william sair_zona` — saída de segurança da Zona Fabular; funciona mesmo com Ultimate encerrada.
+-- `[` e `]` — alternam habilidade anterior/próxima; `R` ativa a habilidade selecionada. Reconfigure em Controles > MineFables em teclado ABNT2.
+-
+-**Ordem das habilidades no HUD**: 1 Ressoar [Eficiência]; 2 Impetuar; 3 Andarilho da Luz; 4 Dragon Override; 5 Overdrive; 6 Mergulhar; 7 Crazy Slots; 8 Zona Fabular. A HUD mostra todas as habilidades, mas **o servidor bloqueia** as não desbloqueadas. Arsenal do Abismo é desbloqueio passivo de fabricação e não ocupa slot ativo.
+-
+-## Regras implementadas
+-
+-| Nível | Desbloqueio | Implementação |
+-|---|---|---|
+-| 1 | Ressoar [Eficiência] | Alterna liga/desliga, **1 Estamina/s**, pausa regeneração natural de Estamina enquanto ligada; Resistência I no começo, Resistência I + Velocidade I após 20 s contínuos; Resistência II + Velocidade I após 40 s; brilho vermelho com equipe de placar |
+-| 2 | Impetuar | Só na potência 3; **10 Estamina**, cooldown de **10 s**; prepara o próximo acerto por até 10 s; dano já reduzido por armadura é multiplicado por 2 para imitar segundo dano idêntico |
+-| 3 | Arsenal do Abismo | `WilliamKit.hasArsenal(player)` sinaliza desbloqueio; **nenhum item nem receita é concedido**, pois os equipamentos não foram especificados/implementados |
+-| 4 | Andarilho da Luz | Mira num baú normal a até 5 blocos para vincular/substituir, ou segura um item para enviar a ele; **40 Estamina** e **30 s de cooldown** tanto ao vincular quanto ao enviar; permite baús em outra dimensão, carrega o chunk do destino e só consome se todo o lote couber |
+-| 5 | Dragon Override | **60 s**, 10 pontos extras de armadura, pode voar, ataques que causam dano incendeiam alvos por 5 s |
+-| 5, durante Ultimate | Overdrive | Queima entidades vivas na região (raio da caixa: 10 blocos), +30 s de Ultimate, **zera Estamina**, cooldown **40 s** |
+-| 5, durante Ultimate | Mergulhar | 10/20/30/40 blocos com custos 10/20/40/80, cooldown **5 s**; busca destino sem colisão no trajeto; o quinto mergulho não é permitido na mesma Ultimate |
+-| 5, durante Ultimate | Crazy Slots | **30 Estamina**, cooldown **30 s**; sorteia uma de seis armas com encantamentos especiais e a substitui na mão por **5 s**; devolve item anteriormente equipado |
+-| 5, durante Ultimate | Zona Fabular | Transfere jogador, jogadores e entidades vivas numa região **10×10×10** para dimensão plana `minefables:zona_fabular`. Sem efeitos próprios nesta primeira versão. `/minefables_william sair_zona` retorna o usuário e entidades marcadas próximas. |
+-
+-**Armas do Crazy Slots:** (1) Besta Perfuração IV + Tiro Múltiplo I carregada com foguete com 8 explosões; (2) Espada de Netherita Afiamento V, Aspecto Flamejante II, Varredura III; (3) Machado de Netherita Afiamento V e Eficiência V; (4) Tridente Empalação V, Canalização I, Lealdade III; (5) Maça Ruptura IV, Rajada de Vento III; (6) Arco Força V, Impacto II, Chama I com uma flecha marcada.
+-
+-**Nota técnica sobre Impétuo:** dobrar o dano final em um único evento de `LivingDamageEvent.Pre` reproduz o valor do segundo golpe, mas **não dispara um segundo evento separado** (não duplica knockback, on-hit e estatísticas). Isso pode ser refinado numa iteração futura.
+-
+-## Roteiro de testes manuais (mundo de teste / cheats)
+-
+-1. **Base e persistência**: compile; abra mundo novo; `character list` deve ter nove jogáveis e `teste`; selecione William e confirme Estamina 100/100. Reinicie o mundo e confirme persistência da escolha e do nível.
+-2. **Nível 1**: sem páginas, R alterna Ressonância. Verifique Resistência I e contorno vermelho; depois de 20s, Velocidade I; depois de 40s, Resistência II. Monitore Estamina consumindo 1/s. Desative aos 39s e religue: começa na potência 1. Esvazie Estamina: deve desligar.
+-3. **Nível 2**: use uma página. Impétuo antes da potência 3 deve falhar; depois dos 40s, cobra 10 Estamina e arma o próximo golpe. Ataque um zumbi com espada, confira dano duplicado e 10s de cooldown; após 10s sem acertar, o bônus expira.
+-4. **Nível 3**: use outra página. `/minefables_william status` indica 3/5; não deve surgir equipamento grátis nem receita nova (a fabricação virá em atualização posterior).
+-5. **Nível 4**: use outra página. Com 40+ Estamina, olhe para baú, use Andarilho, espere 30 s. Segure 12 pedras e use habilidade olhando para longe do baú: deve enviar todas. Teste baú cheio, remoção do baú, outro baú, baú distante e baú em outra dimensão. Ao falhar por falta de espaço não cobra recurso. Não teste com itens únicos sem backup.
+-6. **Nível 5**: use última página. Dragon Override deve fornecer 10 de armadura, voo e 60s de duração; ataque zumbi para verificar combustão. Finalizada Ultimate, bônus de armadura e voo devem desaparecer (salvo voo já autorizado antes).
+-7. **Overdrive**: durante Ultimate, com mobs por perto, use Overdrive; Estamina zera, mobs queimam, duração aumenta em 30s, habilidade entra em cooldown 40s.
+-8. **Mergulhar**: reabasteça Estamina via comando OP entre mergulhos; confira 10/20/30/40 blocos e 10/20/40/80 Estamina; espere 5s entre usos; teste contra paredes e borda do mundo. Não deve entrar em bloco sólido. Quinto uso bloqueado.
+-9. **Crazy Slots**: reabasteça Estamina, ative Ultimate e Crazy Slots; confira nome e encantamentos das seis armas em várias tentativas, 5s de vida e cooldown 30s. O item original deve voltar. Teste trocar de slot, abrir baú, largar arma e expirar Ultimate, verificando remoção dos itens temporários.
+-10. **Zona Fabular**: abra mundo **novo depois da instalação** para garantir registro da dimensão. Com Ultimate ativa, aproxime zumbi/vaca/outro jogador dentro do cubo 10×10×10 e ative Zona. Todos devem ir para a dimensão plana. Saia por `/minefables_william sair_zona` e verifique posições originais. Teste também usar a própria habilidade para retornar durante Ultimate.
+-11. **Ciclo de vida**: teste morte, `/reload`, desconexão/reconexão e reset pela Maçã de Debugger com Ressonância/Ultimate ativos; verifique que bônus e armas temporárias não persistem indevidamente. Testes multiplayer devem ser feitos em mundo descartável.
+-
+-## Limitações e decisões provisórias
+-
+-- **Compilação ainda não executada neste ambiente**. API foi verificada por documentação de NeoForge 1.21.1, mas podem existir incompatibilidades de compilação com o checkout exato do GitHub. Este ZIP é um **candidato a patch**, não uma build aprovada.
+-- **Zona Fabular:** usa uma dimensão **compartilhada**, plana, sem isolamento por usuário, sem cenário próprio. O retorno agrupa entidades marcadas até 5 blocos em cada direção perto de quem usa o comando; entidades que se afastarem terão que ser recuperadas individualmente ou com ferramentas OP. Teleporte de entidades montadas é simplificado.
+-- **Arsenal:** sem receitas nem equipamentos, apenas desbloqueio funcional na API. É necessário decidir quais itens e como serão fabricados.
+-- **Crazy Slots é protótipo**: os itens carregam marcação NBT, e há bloqueios de drop e remoção periódica do inventário, mas não se garante cobertura completa de transferências para contêineres por outros mods, itens de projétil, morte ou falhas de servidor. Teste **somente em mundo descartável**; não disponibilize para servidor público antes de testar duplicação/inventário.
+-- **Andarilho:** funciona com baús comuns (`ChestBlockEntity`); por ora só usa as 27 posições da metade visada de um baú duplo; não considera baús de Ender, barrels, itens de outras mods ou regras de travamento.
+-- **Ressonância:** seu desligamento remove efeitos de velocidade, resistência e brilho do jogador; caso tenham sido aplicados simultaneamente por poção ou outra habilidade, podem ser cancelados também. O brilho vermelho é feito por equipe do placar e pode interferir temporariamente com outra equipe.
+-- **Mergulhar:** a distância nominal máxima depende de obstáculos e colisões; se não existir ponto seguro, a habilidade falha sem consumir Estamina.
+-- **Texturas**: Página de William usa textura vanilla de papel, sem criar arte nova. Não altera a HUD compacta existente.
+-- **Páginas**: por enquanto são obtidas com `/give`; não há drop, receita, baú de loot nem sistema narrativo de descoberta.
+-- **Balanceamento**: mantém regeneração anterior de Estamina +10/s quando Ressonância desligada; demais valores não foram alterados. O custo/tempo de Overdrive, a duração de Impétuo armado e a área do Overdrive seguem escolhas técnicas explicitadas acima.
+-
+-## Arquivos modificados
+-
+-- `MineFables.java`: registra eventos do kit, impede itens de Crazy Slots descartados.
+-- `ability/AbilityBootstrap.java`: registra as habilidades de William.
+-- `character/{CharacterBootstrap,PlayerCharacterService}.java`: limita elenco e integra a Maçã de Debugger com o reset de William.
+-- `resource/{CharacterResourceProfiles,ResourceEvents}.java`: recursos e regra de Estamina.
+-- `item/{ModItems,WilliamPageItem}.java`: registra Páginas.
+-- `william/{WilliamKit,WilliamCrazySlots,WilliamZone}.java`: novo kit.
+-- `assets/minefables/{lang,models/item}`: nomes traduzíveis e modelo do item.
+-- `data/minefables/dimension/zona_fabular.json`: dimensão plana.
+-
+-**Para revisar o diff:** `git diff --stat` e `git diff`. **Não faça commit antes de passar nos testes**. Depois: `git add src && git commit -m "feat: implementar kit inicial de William"`.
+diff --git a/README.md b/README.md
+index eb3fff8..700eec0 100644
+--- a/README.md
++++ b/README.md
+@@ -33,4 +33,43 @@ factions, progression, abilities and custom gameplay systems.
+ 
+ ## Project Status
+ 
+-Early development. Core project setup completed.
++Early development. William and ability/resource systems are under active development.
++
++## William — Dragon Install
++
++Ao ativar **Dragon Override**, o servidor envia um pacote de estado visual para jogadores
++proximos. Durante a ultimate, a armadura vanilla equipada deixa de ser desenhada e a
++armadura personalizada aparece sobre o modelo do jogador (terceira pessoa). A
++armadura real no inventario e seus atributos nao sao modificados pela camada visual.
++A camada desaparece ao encerrar a ultimate.
++
++O projeto depende de **GeckoLib 4.9.3** (NeoForge 1.21.1); o Gradle baixa a
++biblioteca do Maven oficial. Para executar o JAR publicado fora do ambiente de
++desenvolvimento, instale tambem o mod GeckoLib correspondente em `mods/`.
++
++O desenho da armadura utiliza um mesh estatico integrado ao `PlayerRenderer`;
++GeckoLib esta pronto para ser utilizado em animacoes posteriores, mas este modelo
++ainda nao possui animacoes GeckoLib. Os grupos do modelo enviado possuem geometria
++na cabeca e no braco direito; os demais ainda nao foram modelados.
++
++Arquivos de arte:
++- `art/source/william/dragon_install/CustomArmor.bbmodel`: projeto editavel Blockbench.
++- `art/source/william/dragon_install/texture.png`: textura editavel usada para exportacao.
++- `src/main/resources/assets/minefables/textures/entity/william/dragon_install.png`: textura do jogo.
++- `src/main/resources/assets/minefables/mesh/william/dragon_install_mesh.json`: geometria
++  utilizada pela camada do jogador (com UVs extraidas do modelo fornecido).
++- `src/main/resources/assets/minefables/geo/william/dragon_install.geo.json`: exportacao
++  GeckoLib reservada para futuras animacoes.
++
++### Testar a transformacao
++
++1. Use um mundo de testes com cheats; selecione William (`/minefables character set william`).
++2. Obtenha quatro paginas (`/give @p minefables:william_page 4`) e use-as para atingir nivel 5.
++3. Equipe armadura vanilla, ative Dragon Override e olhe em terceira pessoa (`F5`).
++4. A armadura vanilla deve desaparecer VISUALMENTE, sem ser removida do inventario;
++   as partes prontas do modelo Dragon Install devem aparecer no jogador.
++5. Espere o fim da ultimate: a armadura vanilla deve aparecer novamente.
++6. Repita com outro jogador na sessao para verificar sincronizacao do estado visual.
++
++**Limite atual:** a visualizacao em primeira pessoa (bracos) nao foi substituida.
++
+diff --git a/build.gradle b/build.gradle
+index 64e87d5..bf2ace3 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -27,7 +27,11 @@ sourceSets.main.resources {
+ }
+ 
+ repositories {
+-    // Add here additional repositories if required by some of the dependencies below.
++    maven {
++        name = 'GeckoLib'
++        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
++        content { includeGroup 'software.bernie.geckolib' }
++    }
+ }
+ 
+ base {
+@@ -116,6 +120,8 @@ configurations {
+ }
+ 
+ dependencies {
++    implementation 'software.bernie.geckolib:geckolib-neoforge-1.21.1:4.9.3'
++
+     // Example optional mod dependency with JEI
+     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
+     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
+diff --git a/dragon_install.patch b/dragon_install.patch
+deleted file mode 100644
+index 9e08171..0000000
+--- a/dragon_install.patch
++++ /dev/null
+@@ -1,167 +0,0 @@
+-diff --git a/src/main/java/io/github/charliechaplim/minefables/MineFables.java b/src/main/java/io/github/charliechaplim/minefables/MineFables.java
+---- a/src/main/java/io/github/charliechaplim/minefables/MineFables.java
+-+++ b/src/main/java/io/github/charliechaplim/minefables/MineFables.java
+-@@ -1,4 +1,6 @@
+- package io.github.charliechaplim.minefables;
+-+
+-+import software.bernie.geckolib.GeckoLib;
+- 
+- import com.mojang.logging.LogUtils;
+- import io.github.charliechaplim.minefables.character.CharacterBootstrap;
+-@@ -29,6 +31,7 @@
+-     }
+- 
+-     public MineFables(IEventBus modEventBus) {
+-+        GeckoLib.initialize();
+-         ModAttachments.register(modEventBus);
+-         ModItems.register(modEventBus);
+-         modEventBus.addListener(ModItems::addToCreativeTab);
+-@@ -41,6 +44,7 @@
+-         NeoForge.EVENT_BUS.addListener(MineFables::discardTemporaryDrops);
+-         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogin);
+-         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogout);
+-+        NeoForge.EVENT_BUS.addListener(WilliamKit::onStartTracking);
+-         NeoForge.EVENT_BUS.addListener(WilliamKit::onClone);
+-         NeoForge.EVENT_BUS.addListener(ResourceEvents::onPlayerTick);
+-         NeoForge.EVENT_BUS.addListener(ResourceEvents::onLogin);
+-diff --git a/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java b/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java
+---- a/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java
+-+++ b/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java
+-@@ -1,4 +1,7 @@
+- package io.github.charliechaplim.minefables;
+-+
+-+import io.github.charliechaplim.minefables.client.render.DragonInstallLayer;
+-+import io.github.charliechaplim.minefables.client.ClientDragonInstallState;
+- 
+- import io.github.charliechaplim.minefables.client.ResourceHud;
+- import io.github.charliechaplim.minefables.client.ClientResourceState;
+-@@ -16,12 +19,14 @@
+-     public MineFablesClient(IEventBus modEventBus) {
+-         modEventBus.addListener(ResourceHud::register);
+-         modEventBus.addListener(AbilityKeys::register);
+-+        modEventBus.addListener(DragonInstallLayer::register);
+-         NeoForge.EVENT_BUS.addListener(AbilityKeys::onClientTick);
+-         NeoForge.EVENT_BUS.addListener(this::onLogout);
+-     }
+-     private void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+-         ClientResourceState.clear();
+-         ClientAbilitySelection.clear();
+-+        ClientDragonInstallState.clear();
+-         io.github.charliechaplim.minefables.client.ClientWilliamState.clear();
+-     }
+- }
+-diff --git a/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java b/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java
+---- a/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java
+-+++ b/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java
+-@@ -1,4 +1,6 @@
+- package io.github.charliechaplim.minefables.network;
+-+
+-+import io.github.charliechaplim.minefables.client.ClientDragonInstallState;
+- 
+- import io.github.charliechaplim.minefables.client.ClientResourceState;
+- import io.github.charliechaplim.minefables.client.ClientWilliamState;
+-@@ -14,12 +16,14 @@
+-     private ResourceNetworking() {}
+- 
+-     public static void register(RegisterPayloadHandlersEvent event) {
+--        // Protocolo 2 inclui o bit de modo em UseAbilityPayload.
+--        var registrar = event.registrar("2");
+-+        // Protocolo 3 inclui o estado visual compartilhado do Dragon Install.
+-+        var registrar = event.registrar("3");
+-         registrar.playToClient(ResourceSyncPayload.TYPE, ResourceSyncPayload.STREAM_CODEC,
+-                 (payload, context) -> ClientResourceState.accept(payload));
+-         registrar.playToClient(WilliamStatusPayload.TYPE, WilliamStatusPayload.STREAM_CODEC,
+-                 (payload, context) -> ClientWilliamState.accept(payload));
+-+        registrar.playToClient(DragonInstallStatePayload.TYPE, DragonInstallStatePayload.STREAM_CODEC,
+-+                (payload, context) -> ClientDragonInstallState.accept(payload));
+-         registrar.playToServer(UseAbilityPayload.TYPE, UseAbilityPayload.STREAM_CODEC,
+-                 (payload, context) -> {
+-                     if (context.player() instanceof ServerPlayer player)
+-@@ -34,4 +38,14 @@
+-     public static void sendWilliam(ServerPlayer player, WilliamStatusPayload status) {
+-         PacketDistributor.sendToPlayer(player, status);
+-     }
+-+    public static void sendDragon(ServerPlayer player, boolean active) {
+-+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(player,
+-+                new DragonInstallStatePayload(player.getUUID(), active));
+-+    }
+-+
+-+    public static void sendDragonTo(ServerPlayer watcher, ServerPlayer target) {
+-+        PacketDistributor.sendToPlayer(watcher, new DragonInstallStatePayload(
+-+                target.getUUID(), io.github.charliechaplim.minefables.william.WilliamKit.isUltimateActive(target)));
+-+    }
+-+
+- }
+-diff --git a/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java b/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java
+---- a/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java
+-+++ b/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java
+-@@ -76,6 +76,7 @@
+-     public static void sync(ServerPlayer p) {
+-         if (!isWilliam(p)) {
+-             ResourceNetworking.sendWilliam(p, new WilliamStatusPayload(1, false, 0, false, 0));
+-+            ResourceNetworking.sendDragon(p, false);
+-             return;
+-         }
+-         CompoundTag tag = data(p);
+-@@ -85,6 +86,7 @@
+-         ResourceNetworking.sendWilliam(p, new WilliamStatusPayload(level(p), isUltimate,
+-                 tag.getBoolean("resonance") ? tier(p) : 0,
+-                 tag.getBoolean("impetuo_armed"), remaining));
+-+        ResourceNetworking.sendDragon(p, isUltimate);
+-     }
+- 
+-     private static void title(ServerPlayer p, String header, String sub, ChatFormatting color) {
+-@@ -520,6 +522,14 @@
+-         if (now % 10 == 0) sync(p);
+-     }
+- 
+-+    /** Entrega o estado a quem começar a enxergar William depois da ativação. */
+-+    public static void onStartTracking(PlayerEvent.StartTracking event) {
+-+        if (event.getEntity() instanceof ServerPlayer watcher
+-+                && event.getTarget() instanceof ServerPlayer target) {
+-+            ResourceNetworking.sendDragonTo(watcher, target);
+-+        }
+-+    }
+-+
+-     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
+-         if (event.getEntity() instanceof ServerPlayer p) {
+-             CompoundTag tag = data(p);
+-diff --git a/build.gradle b/build.gradle
+---- a/build.gradle
+-+++ b/build.gradle
+-@@ -26,3 +26,8 @@
+- repositories {
+-+    maven {
+-+        name = 'GeckoLib'
+-+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+-+        content { includeGroup 'software.bernie.geckolib' }
+-+    }
+-     // Add here additional repositories if required by some of the dependencies below.
+- }
+-@@ -104,2 +110,3 @@
+- dependencies {
+-+    implementation "software.bernie.geckolib:geckolib-neoforge-1.21.1:4.9.3"
+-     // Example optional mod dependency with JEI
+-diff --git a/src/main/templates/META-INF/neoforge.mods.toml b/src/main/templates/META-INF/neoforge.mods.toml
+---- a/src/main/templates/META-INF/neoforge.mods.toml
+-+++ b/src/main/templates/META-INF/neoforge.mods.toml
+-@@ -47,6 +47,9 @@
+- # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
+- #[[mixins]]
+- #config="${mod_id}.mixins.json"
+-+[[mixins]]
+-+config="minefables.mixins.json"
+-+
+- # The [[accessTransformers]] block allows you to declare where your AT file is.
+- # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
+- #[[accessTransformers]]
+-@@ -83,2 +86,9 @@
+- #[features.${mod_id}]
+- #openGLVersion="[3.2,)"
+-+
+-+[[dependencies.${mod_id}]]
+-+    modId="geckolib"
+-+    type="required"
+-+    versionRange="[4.9.3,)"
+-+    ordering="AFTER"
+-+    side="BOTH"
+diff --git a/src/main/java/io/github/charliechaplim/minefables/MineFables.java b/src/main/java/io/github/charliechaplim/minefables/MineFables.java
+index f78aeda..054bdd2 100644
+--- a/src/main/java/io/github/charliechaplim/minefables/MineFables.java
++++ b/src/main/java/io/github/charliechaplim/minefables/MineFables.java
+@@ -41,6 +41,7 @@ public final class MineFables {
+         NeoForge.EVENT_BUS.addListener(MineFables::discardTemporaryDrops);
+         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogin);
+         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogout);
++        NeoForge.EVENT_BUS.addListener(WilliamKit::onStartTracking);
+         NeoForge.EVENT_BUS.addListener(WilliamKit::onClone);
+         NeoForge.EVENT_BUS.addListener(ResourceEvents::onPlayerTick);
+         NeoForge.EVENT_BUS.addListener(ResourceEvents::onLogin);
+diff --git a/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java b/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java
+index 6118169..e2d7551 100644
+--- a/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java
++++ b/src/main/java/io/github/charliechaplim/minefables/MineFablesClient.java
+@@ -1,6 +1,8 @@
+ package io.github.charliechaplim.minefables;
+ 
+ import io.github.charliechaplim.minefables.client.ResourceHud;
++import io.github.charliechaplim.minefables.client.ClientDragonInstallState;
++import io.github.charliechaplim.minefables.client.render.DragonInstallLayer;
+ import io.github.charliechaplim.minefables.client.ClientResourceState;
+ import io.github.charliechaplim.minefables.client.ClientAbilitySelection;
+ import io.github.charliechaplim.minefables.client.AbilityKeys;
+@@ -16,12 +18,14 @@ public final class MineFablesClient {
+     public MineFablesClient(IEventBus modEventBus) {
+         modEventBus.addListener(ResourceHud::register);
+         modEventBus.addListener(AbilityKeys::register);
++        modEventBus.addListener(DragonInstallLayer::register);
+         NeoForge.EVENT_BUS.addListener(AbilityKeys::onClientTick);
+         NeoForge.EVENT_BUS.addListener(this::onLogout);
+     }
+     private void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+         ClientResourceState.clear();
+         ClientAbilitySelection.clear();
++        ClientDragonInstallState.clear();
+         io.github.charliechaplim.minefables.client.ClientWilliamState.clear();
+     }
+ }
+diff --git a/src/main/java/io/github/charliechaplim/minefables/mixin/client/HideVanillaArmorMixin.java b/src/main/java/io/github/charliechaplim/minefables/mixin/client/HideVanillaArmorMixin.java
+index ab3604d..ab21a36 100644
+--- a/src/main/java/io/github/charliechaplim/minefables/mixin/client/HideVanillaArmorMixin.java
++++ b/src/main/java/io/github/charliechaplim/minefables/mixin/client/HideVanillaArmorMixin.java
+@@ -14,7 +14,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+ /** Oculta APENAS a aparência vanilla da armadura, só para jogadores em Dragon Install. */
+ @Mixin(HumanoidArmorLayer.class)
+ public abstract class HideVanillaArmorMixin {
+-    @Inject(method = "render", at = @At("HEAD"), cancellable = true)
++    @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V",
++            at = @At("HEAD"), cancellable = true)
+     private void minefables$hideArmor(PoseStack pose, MultiBufferSource buffers, int packedLight,
+             LivingEntity wearer, float limbSwing, float limbSwingAmount, float partialTick,
+             float ageInTicks, float netHeadYaw, float headPitch, CallbackInfo ci) {
+diff --git a/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java b/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java
+index bd02d7e..60648a2 100644
+--- a/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java
++++ b/src/main/java/io/github/charliechaplim/minefables/network/ResourceNetworking.java
+@@ -2,6 +2,7 @@ package io.github.charliechaplim.minefables.network;
+ 
+ import io.github.charliechaplim.minefables.client.ClientResourceState;
+ import io.github.charliechaplim.minefables.client.ClientWilliamState;
++import io.github.charliechaplim.minefables.client.ClientDragonInstallState;
+ import io.github.charliechaplim.minefables.ability.AbilityService;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.neoforged.neoforge.network.PacketDistributor;
+@@ -14,12 +15,14 @@ public final class ResourceNetworking {
+     private ResourceNetworking() {}
+ 
+     public static void register(RegisterPayloadHandlersEvent event) {
+-        // Protocolo 2 inclui o bit de modo em UseAbilityPayload.
+-        var registrar = event.registrar("2");
++        // Protocolo 3 inclui visuais do Dragon Install para todos os clientes.
++        var registrar = event.registrar("3");
+         registrar.playToClient(ResourceSyncPayload.TYPE, ResourceSyncPayload.STREAM_CODEC,
+                 (payload, context) -> ClientResourceState.accept(payload));
+         registrar.playToClient(WilliamStatusPayload.TYPE, WilliamStatusPayload.STREAM_CODEC,
+                 (payload, context) -> ClientWilliamState.accept(payload));
++        registrar.playToClient(DragonInstallStatePayload.TYPE, DragonInstallStatePayload.STREAM_CODEC,
++                (payload, context) -> ClientDragonInstallState.accept(payload));
+         registrar.playToServer(UseAbilityPayload.TYPE, UseAbilityPayload.STREAM_CODEC,
+                 (payload, context) -> {
+                     if (context.player() instanceof ServerPlayer player)
+@@ -34,4 +37,16 @@ public final class ResourceNetworking {
+     public static void sendWilliam(ServerPlayer player, WilliamStatusPayload status) {
+         PacketDistributor.sendToPlayer(player, status);
+     }
++
++    /** Estado de armadura visual, transmitido apenas a quem acompanha o jogador. */
++    public static void sendDragon(ServerPlayer player, boolean active) {
++        PacketDistributor.sendToPlayersTrackingEntityAndSelf(player,
++                new DragonInstallStatePayload(player.getUUID(), active));
++    }
++
++    /** Entrega o estado atual a clientes que comecam a enxergar um William ja transformado. */
++    public static void sendDragonTo(ServerPlayer watcher, ServerPlayer target) {
++        PacketDistributor.sendToPlayer(watcher,
++                new DragonInstallStatePayload(target.getUUID(), true));
++    }
+ }
+diff --git a/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java b/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java
+index f17b29a..34bcc3f 100644
+--- a/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java
++++ b/src/main/java/io/github/charliechaplim/minefables/william/WilliamKit.java
+@@ -379,6 +379,7 @@ public final class WilliamKit {
+                 p.getZ(), 120, 1.3, 1.1, 1.3, .08);
+         title(p, "DRAGON OVERRIDE", "Ultimate ativada — 60 segundos", ChatFormatting.GOLD);
+         say(p, "DRAGON OVERRIDE: 60 segundos!");
++        ResourceNetworking.sendDragon(p, true);
+         sync(p);
+         return true;
+     }
+@@ -477,6 +478,7 @@ public final class WilliamKit {
+         if (armor != null) armor.removeModifier(ARMOR_ID);
+         WilliamCrazySlots.restore(p);
+         say(p, "Dragon Override encerrado.");
++        ResourceNetworking.sendDragon(p, false);
+         p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_DEACTIVATE,
+                 SoundSource.PLAYERS, .75f, .8f);
+         sync(p);
+@@ -516,8 +518,20 @@ public final class WilliamKit {
+             p.serverLevel().sendParticles(ParticleTypes.SOUL_FIRE_FLAME, p.getX(),
+                     p.getY() + .35, p.getZ(), 4, .3, .2, .3, .005);
+         }
+-        // Reenvio leve para contagem regressiva e recuperacao de pacotes atrasados.
+-        if (now % 10 == 0) sync(p);
++        // Contagem da HUD para o proprio jogador; heartbeat visual para observadores.
++        if (now % 10 == 0) {
++            sync(p);
++            if (isUltimateActive(p)) ResourceNetworking.sendDragon(p, true);
++        }
++    }
++
++    /** Novos observadores recebem a transformacao sem esperar o heartbeat. */
++    public static void onStartTracking(PlayerEvent.StartTracking event) {
++        if (event.getEntity() instanceof ServerPlayer watcher
++                && event.getTarget() instanceof ServerPlayer target
++                && isUltimateActive(target)) {
++            ResourceNetworking.sendDragonTo(watcher, target);
++        }
+     }
+ 
+     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
+diff --git a/src/main/templates/META-INF/neoforge.mods.toml b/src/main/templates/META-INF/neoforge.mods.toml
+index 7e3b4c1..1527e6b 100644
+--- a/src/main/templates/META-INF/neoforge.mods.toml
++++ b/src/main/templates/META-INF/neoforge.mods.toml
+@@ -49,9 +49,9 @@ description='''
+ Example mod description.
+ '''
+ 
+-# The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
+-#[[mixins]]
+-#config="${mod_id}.mixins.json"
++# Oculta somente a camada visual da armadura vanilla durante Dragon Override.
++[[mixins]]
++config="${mod_id}.mixins.json"
+ 
+ # The [[accessTransformers]] block allows you to declare where your AT file is.
+ # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
+@@ -91,3 +91,11 @@ Example mod description.
+ # stop your mod loading on the server for example.
+ #[features.${mod_id}]
+ #openGLVersion="[3.2,)"
++
++# Renderer de animacoes/modelos disponivel para expansoes futuras do Dragon Install.
++[[dependencies.${mod_id}]]
++modId="geckolib"
++type="required"
++versionRange="[4.9.3,5)"
++ordering="AFTER"
++side="BOTH"

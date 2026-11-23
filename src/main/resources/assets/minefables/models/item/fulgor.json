@@ -1,0 +1,17 @@
+{
+  "loader": "neoforge:separate_transforms",
+  "base": {
+    "parent": "minefables:item/fulgor_gecko"
+  },
+  "perspectives": {
+    "gui": {
+      "parent": "minefables:item/fulgor_icone"
+    },
+    "ground": {
+      "parent": "minefables:item/fulgor_icone"
+    },
+    "fixed": {
+      "parent": "minefables:item/fulgor_icone"
+    }
+  }
+}

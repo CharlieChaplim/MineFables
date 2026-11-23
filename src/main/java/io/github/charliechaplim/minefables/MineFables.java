@@ -37,7 +37,11 @@ public final class MineFables {
         NeoForge.EVENT_BUS.addListener(CharacterCommands::register);
         NeoForge.EVENT_BUS.addListener(WilliamKit::registerCommands);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onTick);
+        NeoForge.EVENT_BUS.addListener(io.github.charliechaplim.minefables.item.FulgorItem::onDamage);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onDamage);
+        NeoForge.EVENT_BUS.addListener(WilliamKit::onDeath);
+        NeoForge.EVENT_BUS.addListener(WilliamKit::onProjectileImpact);
+        NeoForge.EVENT_BUS.addListener(WilliamKit::onProjectileTick);
         NeoForge.EVENT_BUS.addListener(MineFables::discardTemporaryDrops);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogin);
         NeoForge.EVENT_BUS.addListener(WilliamKit::onLogout);

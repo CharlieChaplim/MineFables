@@ -22,6 +22,9 @@ public final class ModItems {
             ITEMS.registerItem("william_page", WilliamPageItem::new,
                     new Item.Properties().stacksTo(16));
 
+    public static final Supplier<FulgorItem> FULGOR = ITEMS.registerItem("fulgor",
+            FulgorItem::new, FulgorItem.properties());
+
     private ModItems() {}
 
     public static void register(IEventBus modEventBus) {
@@ -33,6 +36,7 @@ public final class ModItems {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(DEBUGGER_APPLE.get());
             event.accept(WILLIAM_PAGE.get());
+            event.accept(FULGOR.get());
         }
     }
 }

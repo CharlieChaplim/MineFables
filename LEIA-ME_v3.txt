@@ -1,0 +1,25 @@
+MineFables - Correcao da roda + reset de cooldowns (v3)
+
+Instalar: extrair na raiz do repositorio (mesclar src) e substituir somente os dois arquivos Java listados.
+Este pacote exige o rework v1 e o patch de correcoes v2 ja aplicados.
+
+Correcoes:
+- Linhas da roda dividem os setores; icones ficam entre linhas.
+- Mouse seleciona o setor exibido corretamente.
+- OP: /minefables_william reset_cooldowns
+- OP: /minefables_william reset_cooldowns <jogador>
+
+Reset limpa recargas de ressonancia, impetuo, caminhante da luz, citacao,
+mergulhar normal/marcado, ultimate, bola de fogo, impulso de vapor,
+sobrecarga e zona. Nao enche estamina nem encerra a ultimate.
+Se a Citacao estiver ativa, devolve a arma original antes do reset.
+Nao encerra uma Zona em andamento, mas limpa sua recarga pendente.
+
+Teste:
+1. Abra a roda segurando R e confira os icones entre as linhas.
+2. Aponte para cada setor, solte R e confira a habilidade selecionada.
+3. Use uma habilidade e verifique a contagem de cooldown.
+4. Execute o comando OP e confira que a contagem zerou.
+5. Teste em outro jogador com o argumento <jogador>.
+
+Validacao: patch submetido a checks estaticos; compilacao Gradle e teste in-game nao realizados neste ambiente.

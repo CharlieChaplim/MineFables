@@ -1,0 +1,33 @@
+MINEFABLES - VERTICE VAZIO AUTOMATICO (v5)
+Minecraft 1.21.1 / NeoForge - patch incremental sobre Zona + Fulgor v4
+
+PROBLEMA:
+O marcador antigo ficava em (0,-60,0), fora da altura valida para uma dimensao
+com tipo minecraft:the_end (limite inferior Y=0). O instalador dizia que havia
+concluido, mas cada uso da habilidade ainda exigia instalar_zona.
+
+CORRECAO:
+- A propria habilidade instala o template na primeira conjuracao SE a arena
+  ainda nao existir.
+- Se a arena antiga ja estiver no mundo, o mod detecta dois blocos do NBT
+  existente e cria um marcador persistente correto: (256,5,256).
+- Nao reinstala a arena em cada ativacao nem precisa executar comandos OP.
+- /minefables_william instalar_zona continua disponivel somente para manutencao.
+- Nenhuma modificacao feita na Fulgor, no raio da Zona ou nas habilidades.
+
+INSTALACAO:
+1. Backup do mundo antes da atualizacao.
+2. Extrair este ZIP na RAIZ do repositorio MineFables (mesclar src/).
+3. Executar: .\\gradlew.bat compileJava
+4. Executar: .\\gradlew.bat runClient
+5. Em um mundo onde a estrutura ja existe, usar Zona Fabular diretamente,
+   sem executar instalar_zona.
+6. Em um mundo novo, a PRIMEIRA conjuracao pode causar uma pausa enquanto
+   carrega 256 chunks e coloca a estrutura NBT (uma unica vez).
+
+NOTAS:
+- O patch altera SOMENTE WilliamZone.java.
+- Requer os assets e codigo das versoes anteriores, incluindo o NBT original.
+- Verificado: sintaxe Java 21, integridade do ZIP e coordenadas dos dois
+  blocos no NBT original. A compilacao Gradle completa e os testes em jogo
+  precisam ser feitos no PC do usuario.

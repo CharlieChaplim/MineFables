@@ -80,7 +80,7 @@ public final class ResourceEvents {
         if (now % 20 == 0) {
             // William nao recupera Estamina enquanto mantem a Ressonancia.
             if (!WilliamKit.isResonating(player))
-                ResourceService.add(player, ResourceType.STAMINA, 10); // 10/s provisorio
+                ResourceService.add(player, ResourceType.STAMINA, 7); // 7/s: mais lento que antes, sem excesso
             ResourceService.add(player, ResourceType.MANA, 2);     // 2/s provisorio
             if (player.level().isDay()) ResourceService.add(player, ResourceType.FAITH, 2);
         }

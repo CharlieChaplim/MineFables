@@ -1,16 +1,12 @@
 {
-  "type": "minecraft:overworld",
+  "type": "minecraft:the_end",
   "generator": {
     "type": "minecraft:flat",
     "settings": {
-      "biome": "minecraft:plains",
+      "biome": "minecraft:the_void",
       "features": false,
       "lakes": false,
-      "layers": [
-        { "height": 1, "block": "minecraft:bedrock" },
-        { "height": 63, "block": "minecraft:stone" },
-        { "height": 1, "block": "minecraft:grass_block" }
-      ],
+      "layers": [],
       "structure_overrides": []
     }
   }
